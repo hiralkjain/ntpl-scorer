@@ -1,0 +1,1 @@
+export default function Loading(){return <div className="flex min-h-[50vh] items-center justify-center"><div className="rounded-xl border bg-white px-5 py-4 text-sm text-slate-600 shadow-sm">Loading tournament...</div></div>}

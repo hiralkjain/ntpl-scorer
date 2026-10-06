@@ -1,0 +1,6 @@
+import {supabase} from "./supabase";
+import type {Tournament,Team,Match} from "./types";
+export async function getTournament(){const {data,error}=await supabase.from("tournaments").select("*").eq("name","Cricket Tournament 2026").single();if(error)throw error;return data as Tournament}
+export async function getTeams(id:string){const {data,error}=await supabase.from("teams").select("*").eq("tournament_id",id).order("name");if(error)throw error;return(data??[]) as Team[]}
+export async function getMatches(id:string){const {data,error}=await supabase.from("matches").select("*").eq("tournament_id",id).order("match_number");if(error)throw error;return(data??[]) as Match[]}
+export function subscribeToTournament(id:string,onChange:()=>void){const c=supabase.channel(`tournament-${id}`).on("postgres_changes",{event:"*",schema:"public",table:"matches",filter:`tournament_id=eq.${id}`},onChange).on("postgres_changes",{event:"*",schema:"public",table:"tournaments",filter:`id=eq.${id}`},onChange).subscribe();return()=>{void supabase.removeChannel(c)}}

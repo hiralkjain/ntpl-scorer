@@ -1,0 +1,96 @@
+NTPL BLR CRICKET TOURNAMENT — CHAT HANDOFF / PROJECT CONTEXT
+==============================================================
+
+We are building a deployable cricket tournament website using React + TypeScript + Vite + Tailwind + Supabase PostgreSQL + Supabase Realtime. No separate custom backend is planned.
+
+TOURNAMENT
+- 5 teams.
+- 13 registered players per team.
+- Exactly 9 players play each match.
+- Each team plays 4 league matches.
+- Top 2 teams go to the final.
+- 10 league matches + 1 final fixture.
+- Ball-by-ball scoring.
+- Need live scores, player stats, highest scorer, highest wickets, Man of the Match, points table and NRR.
+
+SPECIAL RULES
+First 2 overs are female-only:
+1. Both batting players must be female.
+2. Bowler must be female.
+3. Female batter cannot be normally dismissed in first 2 overs.
+4. If a female batter is marked OUT in first 2 overs: actual wickets do NOT increase; team score decreases by 2; delivery counts as a ball; same batter stays; store special_event='female_protected_wicket', dismissed_player_id=<batter>, score_adjustment=-2.
+5. Female wide in first 2 overs = +2 runs and counts as a legal/valid ball.
+6. Female no-ball in first 2 overs = +2 runs and counts as a legal/valid ball.
+7. After 2 overs, normal/global cricket rules apply: wide +1 and not legal; no-ball +1 and not legal; wickets are real.
+8. Female return rule: a female opener who survives the complete first 2 overs without ever receiving the protected-out event becomes eligible to return later. A female who had a protected-out event is never eligible. When exactly one male batter remains in the innings, an eligible female can return. Each eligible player's return privilege can be used once. Protected-out is never counted as a real wicket.
+
+PLAYER RULE
+- Playing 9 must contain 2–4 female players per team.
+- First two batters and first bowler must be female.
+
+DATABASE TABLES
+- tournaments
+- teams
+- players
+- matches
+- match_squads
+- innings
+- balls
+- match_awards
+- tournament_staff
+
+KNOWN SCHEMA
+players columns:
+id, team_id, name, jersey_number, role, is_captain, is_wicket_keeper, created_at, gender
+
+match_squads columns:
+id, match_id, team_id, player_id, is_playing, batting_position
+
+innings has existing columns including:
+match_id, innings_number, batting_team_id, bowling_team_id, striker_id, non_striker_id, current_bowler_id, total_runs, wickets, legal_balls, overs_limit, innings_status, started_at, completed_at
+
+balls has existing columns including:
+innings_id, ball_number, over_number, legal_delivery, batter_runs, extras_runs, total_runs, wicket, wicket_type, dismissed_player_id, striker_id, non_striker_id, bowler_id, notes, special_event, score_adjustment
+
+Step 1F SQL already ran. RLS development policies were added for match_squads, innings, matches, balls, players and teams so the frontend can currently read/write. These must be locked down before deployment.
+
+COMPLETED
+- Starter runs locally.
+- Fixtures show 5 teams and 10 league + final fixture.
+- Match Setup works.
+- Exactly 9 players per team and 2–4 females validation works.
+- Batting team, two female openers and female opening bowler are selected.
+- START MATCH works and reaches /scorer/:matchId with 0/0.
+- An innings_number NOT NULL issue was found and fixed by inserting innings_number: 1.
+
+CURRENT STEP: 1F-C
+Files in current project:
+- src/pages/Scorer.tsx = first real ball-by-ball scorer.
+- supabase/migrations/1f-c-female-return.sql = adds persistent arrays:
+  female_return_eligible_ids uuid[] DEFAULT '{}'
+  female_return_used_ids uuid[] DEFAULT '{}'
+
+1F-C SCORER BEHAVIOR
+- 0,1,2,3,4,6 buttons.
+- Protected female OUT button in first 2 overs.
+- Female wide/no-ball special handling in first 2 overs.
+- Normal wide/no-ball after 2 overs.
+- Realtime subscriptions for innings and balls.
+- Normal wicket asks for next batter.
+- At exactly 12 legal balls, current female openers who survived without protected-out are saved as return-eligible.
+- Return button only works after 2 overs and checks exactly one male batter remains based on actual wicket events.
+
+IMMEDIATE NEXT TASK
+1. Run supabase/migrations/1f-c-female-return.sql in Supabase SQL Editor.
+2. Replace the local project with the current Step 1F-C files if needed.
+3. Test first over ball-by-ball.
+4. Verify database rows after every ball.
+5. Test protected female OUT: score -2, wickets unchanged, ball count +1, same striker remains.
+6. Test female wide/no-ball: +2 and ball count +1.
+7. Test after 12 legal balls that female return eligibility is persisted.
+8. Test a normal wicket after 2 overs and next-batter selection.
+9. Test female return when exactly one male remains.
+10. Then implement full player batting/bowling statistics, second innings, innings completion, result, NRR, points table, public live page, Man of the Match, admin authentication and production RLS.
+
+IMPORTANT
+Do not recreate existing tables. Use migrations with ALTER TABLE / IF NOT EXISTS. Before production, replace permissive development RLS with staff-only write access and public read-only live-score access.
