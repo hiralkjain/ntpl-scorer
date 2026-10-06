@@ -75,6 +75,7 @@ export default function MatchSetup() {
           .from("teams")
           .select("id,tournament_id,name,short_name,logo_url")
           .in("id", teamIds),
+
         supabase
           .from("players")
           .select("id,team_id,name,jersey_number,role,gender")
@@ -101,15 +102,20 @@ export default function MatchSetup() {
         .select("player_id,team_id,is_playing,batting_position")
         .eq("match_id", matchId)
         .eq("is_playing", true)
-        .order("batting_position", { ascending: true, nullsFirst: false });
+        .order("batting_position", {
+          ascending: true,
+          nullsFirst: false,
+        });
 
       if (!squadError && squadData?.length) {
         const rows = squadData as SquadRow[];
+
         setSelectedA(
           rows
             .filter((r) => r.team_id === matchData.team_a_id)
             .map((r) => r.player_id),
         );
+
         setSelectedB(
           rows
             .filter((r) => r.team_id === matchData.team_b_id)
@@ -133,6 +139,7 @@ export default function MatchSetup() {
 
   const bowlingTeamId = useMemo(() => {
     if (!match || !battingTeamId) return "";
+
     return battingTeamId === match.team_a_id
       ? (match.team_b_id ?? "")
       : (match.team_a_id ?? "");
@@ -160,9 +167,11 @@ export default function MatchSetup() {
 
     if (selected.includes(playerId)) {
       setter(selected.filter((id) => id !== playerId));
+
       if (playerId === strikerId) setStrikerId("");
       if (playerId === nonStrikerId) setNonStrikerId("");
       if (playerId === bowlerId) setBowlerId("");
+
       return;
     }
 
@@ -176,6 +185,7 @@ export default function MatchSetup() {
 
   function validate() {
     if (!matchId || !match) return "Match not found.";
+
     if (selectedA.length !== 9 || selectedB.length !== 9)
       return "Select exactly 9 players for both teams.";
 
@@ -183,15 +193,25 @@ export default function MatchSetup() {
     const femaleB = femaleCount(selectedB);
 
     if (femaleA < 2 || femaleA > 4)
-      return `${teamA?.name ?? "Team A"} must have 2–4 female players in the playing 9.`;
+      return `${
+        teamA?.name ?? "Team A"
+      } must have 2–4 female players in the playing 9.`;
+
     if (femaleB < 2 || femaleB > 4)
-      return `${teamB?.name ?? "Team B"} must have 2–4 female players in the playing 9.`;
+      return `${
+        teamB?.name ?? "Team B"
+      } must have 2–4 female players in the playing 9.`;
+
     if (!battingTeamId) return "Select the batting team.";
+
     if (!strikerId || !nonStrikerId) return "Select both opening batters.";
+
     if (strikerId === nonStrikerId)
       return "Striker and non-striker must be different players.";
+
     if (!playingIds.includes(strikerId) || !playingIds.includes(nonStrikerId))
       return "Both opening batters must be in the playing 9.";
+
     if (!bowlerId) return "Select the opening bowler.";
 
     const striker = players.find((p) => p.id === strikerId);
@@ -206,6 +226,7 @@ export default function MatchSetup() {
     ) {
       return "Both opening batters must be female because overs 1–2 are female-only.";
     }
+
     if (!bowler || bowler.team_id !== bowlingTeamId || !isFemale(bowler)) {
       return "The opening bowler must be a female player from the bowling team.";
     }
@@ -215,6 +236,7 @@ export default function MatchSetup() {
 
   async function startMatch() {
     const errorMessage = validate();
+
     if (errorMessage) {
       setMessage(errorMessage);
       return;
@@ -246,11 +268,13 @@ export default function MatchSetup() {
         .from("match_squads")
         .delete()
         .eq("match_id", matchId);
+
       if (deleteError) throw deleteError;
 
       const { error: squadError } = await supabase
         .from("match_squads")
         .insert([...orderedA, ...orderedB]);
+
       if (squadError) throw squadError;
 
       // Only create innings if this match has not already been started.
@@ -259,6 +283,7 @@ export default function MatchSetup() {
         .select("id")
         .eq("match_id", matchId)
         .limit(1);
+
       if (existingError) throw existingError;
 
       console.log("START INNINGS VALUES:", {
@@ -268,6 +293,7 @@ export default function MatchSetup() {
         battingTeamId,
         bowlingTeamId,
       });
+
       if (!existingInnings?.length) {
         const { error: inningsError } = await supabase.from("innings").insert({
           match_id: matchId,
@@ -321,6 +347,7 @@ export default function MatchSetup() {
         .from("matches")
         .update({ status: "live" })
         .eq("id", matchId);
+
       if (matchError) throw matchError;
 
       navigate(`/scorer/${matchId}`);
@@ -339,6 +366,7 @@ export default function MatchSetup() {
     setter: Dispatch<SetStateAction<string[]>>,
   ) {
     const active = selected.includes(player.id);
+
     return (
       <button
         key={player.id}
@@ -346,23 +374,29 @@ export default function MatchSetup() {
         onClick={() => togglePlayer(player.id, selected, setter)}
         className={`w-full rounded-xl border p-3 text-left transition ${
           active
-            ? "border-slate-950 bg-slate-950 text-white"
-            : "bg-white hover:bg-slate-50"
+            ? "border-[#0B4D2B] bg-[#0B4D2B] text-white"
+            : "border-slate-200 bg-white text-slate-900 hover:bg-green-50"
         }`}
       >
         <div className="flex items-center justify-between">
           <div>
             <div className="font-semibold">{player.name}</div>
+
             <div
-              className={`mt-1 text-xs ${active ? "text-slate-300" : "text-slate-500"}`}
+              className={`mt-1 text-xs ${
+                active ? "text-green-100" : "text-slate-500"
+              }`}
             >
               {isFemale(player) ? "Female" : "Male"}
+
               {player.jersey_number != null
                 ? ` · #${player.jersey_number}`
                 : ""}
+
               {player.role ? ` · ${player.role}` : ""}
             </div>
           </div>
+
           <span className="text-lg font-black">{active ? "✓" : "+"}</span>
         </div>
       </button>
@@ -371,43 +405,55 @@ export default function MatchSetup() {
 
   if (loading)
     return (
-      <div className="rounded-2xl border bg-white p-6">
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 text-slate-900">
         Loading match setup...
       </div>
     );
+
   if (!match)
     return (
-      <div className="rounded-2xl border bg-red-50 p-6 text-red-700">
+      <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-700">
         {message || "Match not found."}
       </div>
     );
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="mx-auto max-w-6xl space-y-6 text-slate-900">
       <div>
         <p className="text-sm font-bold text-slate-500">
           MATCH #{match.match_number}
         </p>
-        <h1 className="text-3xl font-black">Match Setup</h1>
+
+        <h1 className="text-3xl font-black text-slate-900">Match Setup</h1>
+
         <p className="mt-2 text-sm text-slate-500">
           Select the playing 9 and configure the female-only first two overs.
         </p>
       </div>
 
       <div className="grid gap-5 lg:grid-cols-2">
-        <section className="rounded-2xl border bg-white p-5 shadow-sm">
+        {/* Team A */}
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 text-slate-900 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="font-bold">{teamA?.name ?? "Team A"}</h2>
+              <h2 className="font-bold text-slate-900">
+                {teamA?.name ?? "Team A"}
+              </h2>
+
               <p className="text-sm text-slate-500">2–4 females in playing 9</p>
             </div>
+
             <div className="text-right">
-              <div className="text-2xl font-black">{selectedA.length}/9</div>
+              <div className="text-2xl font-black text-slate-900">
+                {selectedA.length}/9
+              </div>
+
               <div className="text-xs text-slate-500">
                 F: {femaleCount(selectedA)}
               </div>
             </div>
           </div>
+
           <div className="mt-4 space-y-2">
             {players
               .filter((p) => p.team_id === match.team_a_id)
@@ -415,19 +461,28 @@ export default function MatchSetup() {
           </div>
         </section>
 
-        <section className="rounded-2xl border bg-white p-5 shadow-sm">
+        {/* Team B */}
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 text-slate-900 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="font-bold">{teamB?.name ?? "Team B"}</h2>
+              <h2 className="font-bold text-slate-900">
+                {teamB?.name ?? "Team B"}
+              </h2>
+
               <p className="text-sm text-slate-500">2–4 females in playing 9</p>
             </div>
+
             <div className="text-right">
-              <div className="text-2xl font-black">{selectedB.length}/9</div>
+              <div className="text-2xl font-black text-slate-900">
+                {selectedB.length}/9
+              </div>
+
               <div className="text-xs text-slate-500">
                 F: {femaleCount(selectedB)}
               </div>
             </div>
           </div>
+
           <div className="mt-4 space-y-2">
             {players
               .filter((p) => p.team_id === match.team_b_id)
@@ -436,15 +491,23 @@ export default function MatchSetup() {
         </section>
       </div>
 
-      <section className="rounded-2xl border bg-white p-5 shadow-sm">
-        <h2 className="font-bold">Opening setup — Overs 1 & 2</h2>
+      {/* Opening Setup */}
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 text-slate-900 shadow-sm">
+        <h2 className="font-bold text-slate-900">
+          Opening setup — Overs 1 & 2
+        </h2>
+
         <p className="mt-1 text-sm text-slate-500">
           Both batters and the bowler must be female.
         </p>
 
         <div className="mt-5 grid gap-4 md:grid-cols-2">
+          {/* Batting Team */}
           <label className="block">
-            <span className="text-sm font-semibold">Batting team</span>
+            <span className="text-sm font-semibold text-slate-900">
+              Batting team
+            </span>
+
             <select
               value={battingTeamId}
               onChange={(e) => {
@@ -453,23 +516,30 @@ export default function MatchSetup() {
                 setNonStrikerId("");
                 setBowlerId("");
               }}
-              className="mt-2 w-full rounded-xl border bg-white px-4 py-3"
+              className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#0B4D2B] focus:ring-2 focus:ring-green-100"
             >
               <option value="">Select team</option>
+
               {teamA && <option value={teamA.id}>{teamA.name}</option>}
+
               {teamB && <option value={teamB.id}>{teamB.name}</option>}
             </select>
           </label>
 
+          {/* Opening Bowler */}
           <label className="block">
-            <span className="text-sm font-semibold">Opening bowler</span>
+            <span className="text-sm font-semibold text-slate-900">
+              Opening bowler
+            </span>
+
             <select
               value={bowlerId}
               onChange={(e) => setBowlerId(e.target.value)}
               disabled={!battingTeamId}
-              className="mt-2 w-full rounded-xl border bg-white px-4 py-3"
+              className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#0B4D2B] focus:ring-2 focus:ring-green-100 disabled:bg-slate-100 disabled:text-slate-400"
             >
               <option value="">Select female bowler</option>
+
               {bowlingPlayers
                 .filter(isFemale)
                 .filter((p) =>
@@ -486,15 +556,20 @@ export default function MatchSetup() {
             </select>
           </label>
 
+          {/* Striker */}
           <label className="block">
-            <span className="text-sm font-semibold">Striker</span>
+            <span className="text-sm font-semibold text-slate-900">
+              Striker
+            </span>
+
             <select
               value={strikerId}
               onChange={(e) => setStrikerId(e.target.value)}
               disabled={!battingTeamId}
-              className="mt-2 w-full rounded-xl border bg-white px-4 py-3"
+              className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#0B4D2B] focus:ring-2 focus:ring-green-100 disabled:bg-slate-100 disabled:text-slate-400"
             >
               <option value="">Select female striker</option>
+
               {battingPlayers
                 .filter(isFemale)
                 .filter((p) => playingIds.includes(p.id))
@@ -506,15 +581,20 @@ export default function MatchSetup() {
             </select>
           </label>
 
+          {/* Non-striker */}
           <label className="block">
-            <span className="text-sm font-semibold">Non-striker</span>
+            <span className="text-sm font-semibold text-slate-900">
+              Non-striker
+            </span>
+
             <select
               value={nonStrikerId}
               onChange={(e) => setNonStrikerId(e.target.value)}
               disabled={!battingTeamId}
-              className="mt-2 w-full rounded-xl border bg-white px-4 py-3"
+              className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#0B4D2B] focus:ring-2 focus:ring-green-100 disabled:bg-slate-100 disabled:text-slate-400"
             >
               <option value="">Select female non-striker</option>
+
               {battingPlayers
                 .filter(isFemale)
                 .filter((p) => playingIds.includes(p.id) && p.id !== strikerId)
@@ -528,17 +608,19 @@ export default function MatchSetup() {
         </div>
       </section>
 
+      {/* Error / message */}
       {message && (
         <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
           {message}
         </div>
       )}
 
+      {/* Start Match */}
       <button
         type="button"
         disabled={saving}
         onClick={() => void startMatch()}
-        className="w-full rounded-2xl bg-slate-950 px-6 py-4 text-lg font-black text-white shadow-sm disabled:opacity-50"
+        className="w-full rounded-2xl bg-[#0B4D2B] px-6 py-4 text-lg font-black text-white shadow-sm transition hover:bg-[#166534] disabled:opacity-50"
       >
         {saving ? "STARTING MATCH..." : "START MATCH"}
       </button>

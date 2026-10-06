@@ -128,51 +128,66 @@ function ballLabel(ball: Ball) {
   return String(ball.runs_total);
 }
 
+function isBowlerWicket(wicketType: string | null) {
+  if (!wicketType) return true;
+
+  const excluded = [
+    "run_out",
+    "run out",
+    "retired_hurt",
+    "retired hurt",
+    "obstructing",
+    "obstructing_field",
+    "timed_out",
+    "timed out",
+    "retired_out",
+    "retired out",
+  ];
+
+  return !excluded.includes(wicketType.toLowerCase());
+}
+
 export default function Scorer() {
   const { matchId } = useParams();
 
   const [innings, setInnings] = useState<Innings | null>(null);
-
   const [players, setPlayers] = useState<Player[]>([]);
-
   const [balls, setBalls] = useState<Ball[]>([]);
 
   const [loading, setLoading] = useState(true);
-
   const [busy, setBusy] = useState(false);
-
   const [message, setMessage] = useState("");
 
   const [showWicket, setShowWicket] = useState(false);
-
   const [showReturn, setShowReturn] = useState(false);
-
   const [showBowlerChange, setShowBowlerChange] = useState(false);
 
   const [editingBall, setEditingBall] = useState<Ball | null>(null);
-
   const [editRuns, setEditRuns] = useState(0);
-
   const [editEvent, setEditEvent] = useState<string>("");
-
   const [editWicket, setEditWicket] = useState(false);
-
   const [editWicketType, setEditWicketType] = useState("bowled");
+  const [editDismissedPlayer, setEditDismissedPlayer] = useState("");
 
-  const [editDismissedPlayer, setEditDismissedPlayer] = useState<string>("");
   const [showOpeningPhaseComplete, setShowOpeningPhaseComplete] =
     useState(false);
+
   const [showMaleBatterSelection, setShowMaleBatterSelection] = useState(false);
+
   const [nextStrikerId, setNextStrikerId] = useState("");
   const [nextNonStrikerId, setNextNonStrikerId] = useState("");
+
   const [showSecondInningsSetup, setShowSecondInningsSetup] = useState(false);
 
   const [secondStrikerId, setSecondStrikerId] = useState("");
   const [secondNonStrikerId, setSecondNonStrikerId] = useState("");
   const [secondBowlerId, setSecondBowlerId] = useState("");
+
   const [showTieWinner, setShowTieWinner] = useState(false);
   const [tieWinnerId, setTieWinnerId] = useState("");
+
   const [teamNames, setTeamNames] = useState<Record<string, string>>({});
+
   /*
    * ---------------------------------------------------------
    * LOAD MATCH
@@ -216,6 +231,7 @@ export default function Scorer() {
       });
 
       setInnings(loadedInnings);
+
       const { data: teamData, error: teamError } = await supabase
         .from("teams")
         .select("id, name")
@@ -280,7 +296,6 @@ export default function Scorer() {
       }
 
       setPlayers((playerData ?? []) as Player[]);
-
       setBalls((ballsResult.data ?? []) as Ball[]);
 
       setLoading(false);
@@ -293,14 +308,14 @@ export default function Scorer() {
    * ---------------------------------------------------------
    * RESTORE SCORER UI FROM DATABASE STATE
    * ---------------------------------------------------------
-   * React-only modal state is rebuilt from persisted innings fields.
-   * This makes refresh/navigation safe while a match is live.
    */
+
   useEffect(() => {
     if (!innings) return;
 
     const isCompleted = innings.innings_status === "completed";
     const isLive = !isCompleted;
+
     const atOpeningBoundary =
       innings.legal_balls >= FEMALE_PHASE_BALLS &&
       innings.striker_id === null &&
@@ -405,9 +420,11 @@ export default function Scorer() {
   const bowler = innings?.current_bowler_id
     ? playerMap.get(innings.current_bowler_id)
     : null;
+
   const legalBallsCompleted = innings?.legal_balls ?? 0;
 
   const currentOver = Math.floor(legalBallsCompleted / 6) + 1;
+
   const firstInningsScore = innings?.target_runs ? innings.target_runs - 1 : 0;
 
   const isTie =
@@ -421,10 +438,6 @@ export default function Scorer() {
     legalBallsCompleted < FEMALE_PHASE_BALLS && currentOver <= 2;
 
   const matchComplete = legalBallsCompleted >= MAX_LEGAL_BALLS;
-
-  const currentOverBalls = balls.filter(
-    (ball) => ball.over_number === currentOver,
-  );
 
   const battingPlayers = players.filter(
     (p) => p.team_id === innings?.batting_team_id,
@@ -445,12 +458,96 @@ export default function Scorer() {
       p.id !== innings?.striker_id &&
       p.id !== innings?.non_striker_id,
   );
+
   const openingPhaseComplete =
     (innings?.legal_balls ?? 0) >= FEMALE_PHASE_BALLS;
 
   const maleBattingPlayers = battingPlayers.filter(
     (player) => !isFemale(player),
   );
+
+  /*
+   * ---------------------------------------------------------
+   * LIVE PLAYER STATISTICS
+   * ---------------------------------------------------------
+   */
+
+  function getBattingStats(playerId: string) {
+    let runs = 0;
+    let ballsFaced = 0;
+
+    for (const ball of balls) {
+      if (ball.striker_id !== playerId) continue;
+
+      /*
+       * A wide is not a ball faced.
+       * No-balls during the opening phase are legal
+       * in this tournament and are counted as balls.
+       */
+      if (
+        ball.special_event === "wide" ||
+        ball.special_event === "female_wide" ||
+        ball.wides > 0
+      ) {
+        continue;
+      }
+
+      ballsFaced += 1;
+
+      runs += ball.runs_batter ?? ball.batter_runs ?? 0;
+    }
+
+    return {
+      runs,
+      balls: ballsFaced,
+    };
+  }
+
+  function getBowlingStats(playerId: string) {
+    let runs = 0;
+    let wickets = 0;
+
+    for (const ball of balls) {
+      if (ball.bowler_id !== playerId) continue;
+
+      /*
+       * Bowler is charged with:
+       * - batter runs
+       * - wides
+       * - no-balls
+       *
+       * Byes and leg-byes are not charged to the bowler.
+       */
+      const batterRuns = ball.runs_batter ?? ball.batter_runs ?? 0;
+
+      const wideRuns = ball.wides ?? 0;
+      const noBallRuns = ball.no_balls ?? 0;
+
+      runs += batterRuns + wideRuns + noBallRuns;
+
+      if (ball.wicket && isBowlerWicket(ball.wicket_type)) {
+        wickets += 1;
+      }
+    }
+
+    return {
+      runs,
+      wickets,
+    };
+  }
+
+  const strikerStats = striker
+    ? getBattingStats(striker.id)
+    : { runs: 0, balls: 0 };
+
+  const nonStrikerStats = nonStriker
+    ? getBattingStats(nonStriker.id)
+    : { runs: 0, balls: 0 };
+
+  const bowlerStats = bowler
+    ? getBowlingStats(bowler.id)
+    : { runs: 0, wickets: 0 };
+
   function notify(text: string) {
     setMessage(text);
 
@@ -466,28 +563,10 @@ export default function Scorer() {
   function getNextPosition(legalDelivery = true) {
     const legalBall = innings?.legal_balls ?? 0;
 
-    /*
-     * Illegal deliveries (normal wide/no-ball after
-     * the opening phase) do not advance the legal ball count.
-     */
     const nextLegalBall = legalDelivery ? legalBall + 1 : legalBall;
 
-    /*
-     * Cricket notation:
-     *
-     * 0.1 - 0.6
-     * 1.1 - 1.6
-     * 2.1 - 2.6
-     *
-     * overNumber is stored/displayed as zero-based.
-     */
     const overNumber = Math.floor(legalBall / 6);
 
-    /*
-     * For an illegal delivery, keep it attached to
-     * the current over rather than consuming the next
-     * legal ball.
-     */
     const ballNumber = legalDelivery ? (legalBall % 6) + 1 : 0;
 
     return {
@@ -496,20 +575,24 @@ export default function Scorer() {
       nextLegalBall,
     };
   }
+
   function overNumberForRules() {
     const legalBalls = innings?.legal_balls ?? 0;
     return Math.floor(legalBalls / 6) + 1;
   }
+
+  /*
+   * ---------------------------------------------------------
+   * SECOND INNINGS
+   * ---------------------------------------------------------
+   */
 
   async function startSecondInnings() {
     if (!innings) return;
 
     const targetRuns = innings.total_runs + 1;
 
-    const battingTeamId = innings.bowling_team_id;
-    const bowlingTeamId = innings.batting_team_id;
-
-    const { data: existingSecond, error: existingError } = await supabase
+    const { error: existingError } = await supabase
       .from("innings")
       .select("id")
       .eq("match_id", innings.match_id)
@@ -522,20 +605,23 @@ export default function Scorer() {
       return;
     }
 
+    const { data: existingSecond } = await supabase
+      .from("innings")
+      .select("id")
+      .eq("match_id", innings.match_id)
+      .eq("innings_number", 2)
+      .maybeSingle();
+
     if (existingSecond) {
       notify("Second innings already exists.");
       return;
     }
 
-    /*
-     * Do not create innings 2 yet.
-     *
-     * First collect the three opening players.
-     */
     setShowSecondInningsSetup(true);
 
     notify(`Select opening players. Target: ${targetRuns}`);
   }
+
   async function chooseTieWinner() {
     if (!innings) return;
 
@@ -564,6 +650,7 @@ export default function Scorer() {
     setShowTieWinner(false);
     notify("Winner selected.");
   }
+
   async function finishMatch(
     winnerTeamId: string | null,
     resultType: "win" | "tie",
@@ -591,6 +678,7 @@ export default function Scorer() {
 
     notify(resultType === "tie" ? "MATCH TIED" : "MATCH COMPLETE");
   }
+
   async function confirmSecondInningsStart() {
     if (!innings) return;
 
@@ -655,6 +743,7 @@ export default function Scorer() {
 
     notify(`Second innings started. Target: ${targetRuns}`);
   }
+
   /*
    * ---------------------------------------------------------
    * RECORD BALL
@@ -683,6 +772,7 @@ export default function Scorer() {
     legalDelivery?: boolean;
   }) {
     if (!innings) return;
+
     if (innings.innings_status === "completed") {
       notify("This innings is complete.");
       return;
@@ -693,8 +783,6 @@ export default function Scorer() {
       return;
     }
 
-    // Do not allow another ball while selecting the
-    // two batters after the opening phase.
     if (showMaleBatterSelection) {
       notify("Select the two batters to continue.");
       return;
@@ -703,14 +791,8 @@ export default function Scorer() {
     setBusy(true);
 
     try {
-      /*
-       * Opening phase = first 12 LEGAL balls only.
-       *
-       * 0.1 -> 1.6 = opening phase
-       * 2.0        = opening phase complete
-       * 2.1 onward = normal cricket rules
-       */
       const isOpeningPhase = (innings.legal_balls ?? 0) < FEMALE_PHASE_BALLS;
+
       const isFemaleWide = specialEvent === "female_wide";
 
       const isFemaleNoBall = specialEvent === "female_no_ball";
@@ -718,15 +800,7 @@ export default function Scorer() {
       const isWide = specialEvent === "wide" || isFemaleWide;
 
       const isNoBall = specialEvent === "no_ball" || isFemaleNoBall;
-      /*
-       * Normalize wide/no-ball according to the phase.
-       *
-       * Opening phase:
-       * female wide/no-ball = 2 runs AND legal delivery
-       *
-       * After 2 overs:
-       * normal wide/no-ball = 1 run AND illegal delivery
-       */
+
       let finalTotalRuns = totalRuns;
       let finalExtrasRuns = extrasRuns;
       let finalSpecialEvent = specialEvent;
@@ -746,18 +820,11 @@ export default function Scorer() {
         }
       }
 
-      /*
-       * Tournament has 7 overs = 42 legal balls.
-       */
       if ((innings.legal_balls ?? 0) >= MAX_LEGAL_BALLS) {
         notify("7 overs are complete.");
         return;
       }
 
-      /*
-       * During the first 2 overs, all three active players
-       * must be female.
-       */
       if (isOpeningPhase) {
         if (!isFemale(striker) || !isFemale(nonStriker) || !isFemale(bowler)) {
           notify("The current player combination is not valid for this phase.");
@@ -773,56 +840,36 @@ export default function Scorer() {
           ? Math.max(...balls.map((b) => b.ball_sequence)) + 1
           : 1;
 
-      /*
-       * For the special -2 protected dismissal,
-       * scoreAdjustment takes priority over normal runs.
-       */
       const scoreDelta =
         scoreAdjustment !== 0 ? scoreAdjustment : finalTotalRuns;
 
       const newScore = innings.total_runs + scoreDelta;
+
       const targetReached =
         innings.innings_number === 2 &&
         innings.target_runs !== null &&
         newScore >= innings.target_runs;
 
       const newWickets = innings.wickets + (wicket ? 1 : 0);
+
       const wicketsRemaining = 9 - newWickets;
 
-      /*
-       * Only 9 wickets because 9 players play.
-       */
       if (newWickets > 9) {
         notify("All 9 wickets have already fallen.");
         return;
       }
 
-      /*
-       * Start with current ends.
-       */
       let nextStriker = innings.striker_id;
       let nextNonStriker = innings.non_striker_id;
 
-      /*
-       * Only runs scored by the batter change ends
-       * automatically.
-       *
-       * Wide/no-ball extras do NOT change strike.
-       */
       if (batterRuns % 2 !== 0) {
         const temp = nextStriker;
         nextStriker = nextNonStriker;
         nextNonStriker = temp;
       }
 
-      /*
-       * Six LEGAL balls complete an over.
-       */
       const endOfOver = finalLegalDelivery && nextLegalBall % 6 === 0;
 
-      /*
-       * At the end of an over, the batters change ends.
-       */
       if (endOfOver) {
         const temp = nextStriker;
         nextStriker = nextNonStriker;
@@ -830,6 +877,7 @@ export default function Scorer() {
       }
 
       const inningsEnds = nextLegalBall >= MAX_LEGAL_BALLS || targetReached;
+
       let matchWinner: string | null = null;
       let matchResultType: "win" | "tie" = "win";
       let matchMargin: number | null = null;
@@ -837,25 +885,16 @@ export default function Scorer() {
 
       if (innings.innings_number === 2 && inningsEnds) {
         if (targetReached) {
-          /*
-           * Team batting in innings 2 won by wickets.
-           */
           matchWinner = innings.batting_team_id;
           matchResultType = "win";
           matchMargin = wicketsRemaining;
           matchMarginType = "wickets";
         } else if (newScore === innings.target_runs! - 1) {
-          /*
-           * Scores are equal.
-           */
           matchWinner = null;
           matchResultType = "tie";
           matchMargin = null;
           matchMarginType = null;
         } else {
-          /*
-           * Team batting in innings 1 won by runs.
-           */
           matchWinner = innings.bowling_team_id;
           matchResultType = "win";
           matchMargin = (innings.target_runs ?? 1) - 1 - newScore;
@@ -863,24 +902,12 @@ export default function Scorer() {
         }
       }
 
-      /*
-       * A normal wicket removes the striker.
-       *
-       * Protected female dismissal does NOT set wicket=true,
-       * so that batter remains during the opening phase.
-       */
       if (wicket) {
         nextStriker = null;
       }
 
-      /*
-       * Is this the exact end of the first 2 overs?
-       */
       const openingPhaseComplete = nextLegalBall === FEMALE_PHASE_BALLS;
 
-      /*
-       * Keep all duplicate run columns synchronized.
-       */
       const ballPayload = {
         innings_id: innings.id,
 
@@ -902,9 +929,9 @@ export default function Scorer() {
 
         runs_total: finalTotalRuns,
 
-        wides: specialEvent?.includes("wide") ? extrasRuns : 0,
+        wides: finalSpecialEvent?.includes("wide") ? finalExtrasRuns : 0,
 
-        no_balls: specialEvent?.includes("no_ball") ? extrasRuns : 0,
+        no_balls: finalSpecialEvent?.includes("no_ball") ? finalExtrasRuns : 0,
 
         byes: 0,
 
@@ -937,9 +964,9 @@ export default function Scorer() {
 
         batter_runs: batterRuns,
 
-        extras_runs: extrasRuns,
+        extras_runs: finalExtrasRuns,
 
-        total_runs: totalRuns,
+        total_runs: finalTotalRuns,
 
         notes: null,
       };
@@ -950,23 +977,8 @@ export default function Scorer() {
         throw error;
       }
 
-      /*
-       * DO NOT rebuild female eligibility here.
-       *
-       * female_return_eligible_ids is maintained by:
-       *
-       * 1. innings initialization
-       * 2. specialDismissal()
-       * 3. returnFemale()
-       *
-       * This prevents a female who had a protected dismissal
-       * from being accidentally re-added.
-       */
       let eligible = innings.female_return_eligible_ids ?? [];
 
-      /*
-       * Prepare innings update.
-       */
       const updatePayload: Partial<Innings> = {
         total_runs: newScore,
 
@@ -987,32 +999,18 @@ export default function Scorer() {
         started_at: innings.started_at ?? new Date().toISOString(),
       };
 
-      /*
-       * At the end of every over, force a new bowler selection.
-       */
       if (endOfOver) {
         updatePayload.current_bowler_id = null;
       }
 
-      /*
-       * Match completion.
-       */
       if (inningsEnds) {
         updatePayload.innings_status = "completed";
         updatePayload.status = "completed";
         updatePayload.completed_at = new Date().toISOString();
+
         updatePayload.current_bowler_id = innings.current_bowler_id;
       }
 
-      /*
-       * At exactly 2.0:
-       *
-       * - opening phase is finished
-       * - pause batting
-       * - scorer must select two male batters
-       *
-       * We don't automatically select them.
-       */
       if (openingPhaseComplete && !inningsEnds) {
         updatePayload.striker_id = null;
         updatePayload.non_striker_id = null;
@@ -1026,6 +1024,7 @@ export default function Scorer() {
       if (inningsError) {
         throw inningsError;
       }
+
       if (innings.innings_number === 2 && inningsEnds) {
         const { error: matchError } = await supabase
           .from("matches")
@@ -1042,10 +1041,6 @@ export default function Scorer() {
           throw matchError;
         }
 
-        /*
-         * Automatically calculate MOM and WOM
-         * after the match result has been saved.
-         */
         try {
           const awards = await calculateAndSaveMatchAwards(innings.match_id);
 
@@ -1056,26 +1051,15 @@ export default function Scorer() {
             WOMScore: awards.wom?.totalImpact ?? 0,
           });
         } catch (awardError) {
-          /*
-           * Do not undo a completed match just because
-           * the award calculation failed.
-           */
           console.error("Failed to calculate automatic MOM/WOM:", awardError);
         }
       }
 
-      /*
-       * Update local state immediately.
-       */
       setInnings({
         ...innings,
         ...updatePayload,
       });
 
-      /*
-       * 2.0 reached:
-       * open male batter selection.
-       */
       if (openingPhaseComplete && !inningsEnds) {
         setNextStrikerId("");
         setNextNonStrikerId("");
@@ -1084,11 +1068,6 @@ export default function Scorer() {
         notify("Opening phase complete. Select the two batters.");
       }
 
-      /*
-       * Every over still gets a bowler picker.
-       *
-       * This includes the end of the second over.
-       */
       if (endOfOver && !inningsEnds) {
         setShowBowlerChange(true);
       }
@@ -1100,9 +1079,10 @@ export default function Scorer() {
         notify("7 overs complete.");
       } else if (endOfOver && !openingPhaseComplete) {
         notify(`Over ${overNumber} complete. Select next bowler.`);
-      } else if (!openingPhaseComplete) {
-        notify("Ball recorded.");
       }
+      //else if (!openingPhaseComplete) {
+      //   notify("Ball recorded.");
+      // }
     } catch (error) {
       notify(error instanceof Error ? error.message : "Could not record ball.");
     } finally {
@@ -1182,10 +1162,6 @@ export default function Scorer() {
    * ---------------------------------------------------------
    * PROTECTED DISMISSAL
    * ---------------------------------------------------------
-   *
-   * UI simply calls this "SPECIAL".
-   *
-   * The rule is automatic during first 2 overs.
    */
 
   async function specialDismissal() {
@@ -1200,9 +1176,6 @@ export default function Scorer() {
 
     const dismissedId = striker.id;
 
-    // The ball counts and the team loses 2 runs.
-    // The batter remains on the crease during the opening phase,
-    // but loses eligibility to return later.
     await recordBall({
       totalRuns: 0,
       scoreAdjustment: -2,
@@ -1212,8 +1185,6 @@ export default function Scorer() {
       dismissedPlayerId: dismissedId,
     });
 
-    // Remove this player from the list of females
-    // who are eligible to return later.
     const currentEligible = innings.female_return_eligible_ids ?? [];
 
     const updatedEligible = currentEligible.filter((id) => id !== dismissedId);
@@ -1227,11 +1198,12 @@ export default function Scorer() {
 
     if (error) {
       console.error("Failed to update female return eligibility:", error);
+
       notify("Could not update return eligibility.");
+
       return;
     }
 
-    // Keep the local innings state synchronized.
     setInnings({
       ...innings,
       female_return_eligible_ids: updatedEligible,
@@ -1269,6 +1241,13 @@ export default function Scorer() {
 
     setShowWicket(false);
   }
+
+  /*
+   * ---------------------------------------------------------
+   * START NORMAL PHASE
+   * ---------------------------------------------------------
+   */
+
   async function startNormalPhase() {
     if (!innings) return;
 
@@ -1292,7 +1271,9 @@ export default function Scorer() {
 
     if (error) {
       console.error("Failed to start normal phase:", error);
+
       notify("Could not select the new batters.");
+
       return;
     }
 
@@ -1308,6 +1289,7 @@ export default function Scorer() {
 
     notify("Normal play started.");
   }
+
   /*
    * ---------------------------------------------------------
    * SELECT NEXT BATTER
@@ -1346,19 +1328,11 @@ export default function Scorer() {
 
     const selected = playerMap.get(playerId);
 
-    /*
-     * First two overs must have
-     * a female bowler.
-     */
     if (femalePhase && !isFemale(selected)) {
       notify("Select a valid bowler for this phase.");
       return;
     }
 
-    /*
-     * Don't allow same bowler
-     * consecutively after an over.
-     */
     if (innings.current_bowler_id === playerId) {
       notify("Select a different bowler.");
       return;
@@ -1409,7 +1383,6 @@ export default function Scorer() {
       .from("innings")
       .update({
         striker_id: playerId,
-
         female_return_used_ids: used,
       })
       .eq("id", innings.id);
@@ -1422,7 +1395,6 @@ export default function Scorer() {
     setInnings({
       ...innings,
       striker_id: playerId,
-
       female_return_used_ids: used,
     });
 
@@ -1433,10 +1405,6 @@ export default function Scorer() {
    * ---------------------------------------------------------
    * UNDO LAST BALL
    * ---------------------------------------------------------
-   *
-   * We delete the latest ball and then
-   * rebuild innings state from all
-   * remaining balls.
    */
 
   async function undoLastBall() {
@@ -1499,13 +1467,8 @@ export default function Scorer() {
 
     const history = (data ?? []) as Ball[];
 
-    /*
-     * Recalculate score.
-     */
     let totalRuns = 0;
-
     let wickets = 0;
-
     let legalBalls = 0;
 
     for (const ball of history) {
@@ -1521,52 +1484,29 @@ export default function Scorer() {
       }
     }
 
-    /*
-     * State before the latest ball
-     * can be reconstructed using the
-     * striker/non-striker stored on
-     * the latest remaining ball.
-     */
     let strikerId: string | null = null;
-
     let nonStrikerId: string | null = null;
-
     let bowlerId: string | null = null;
 
     if (history.length > 0) {
       const last = history[history.length - 1];
 
       strikerId = last.striker_id;
-
       nonStrikerId = last.non_striker_id;
-
       bowlerId = last.bowler_id;
 
-      /*
-       * Reconstruct end position
-       * from all balls after the
-       * last stored player state.
-       */
       if (last.runs_total % 2 !== 0) {
         const temp = strikerId;
-
         strikerId = nonStrikerId;
-
         nonStrikerId = temp;
       }
 
       if (last.is_legal_delivery && legalBalls % 6 === 0) {
         const temp = strikerId;
-
         strikerId = nonStrikerId;
-
         nonStrikerId = temp;
       }
 
-      /*
-       * Real wicket means the striker
-       * needs a replacement.
-       */
       if (last.wicket) {
         strikerId = null;
       }
@@ -1576,15 +1516,10 @@ export default function Scorer() {
       .from("innings")
       .update({
         total_runs: totalRuns,
-
         wickets,
-
         legal_balls: legalBalls,
-
         striker_id: strikerId,
-
         non_striker_id: nonStrikerId,
-
         current_bowler_id: bowlerId,
       })
       .eq("id", innings.id);
@@ -1597,17 +1532,11 @@ export default function Scorer() {
 
     setInnings({
       ...innings,
-
       total_runs: totalRuns,
-
       wickets,
-
       legal_balls: legalBalls,
-
       striker_id: strikerId,
-
       non_striker_id: nonStrikerId,
-
       current_bowler_id: bowlerId,
     });
   }
@@ -1640,10 +1569,6 @@ export default function Scorer() {
     setBusy(true);
 
     try {
-      /*
-       * Special protected event:
-       * score adjustment = -2
-       */
       const isProtected = editEvent === "female_protected_wicket";
 
       const scoreAdjustment = isProtected ? -2 : 0;
@@ -1707,7 +1632,9 @@ export default function Scorer() {
 
   if (loading) {
     return (
-      <div className="p-8 text-center font-semibold">Loading scorer...</div>
+      <div className="p-8 text-center font-semibold text-slate-900">
+        Loading scorer...
+      </div>
     );
   }
 
@@ -1726,13 +1653,13 @@ export default function Scorer() {
    */
 
   return (
-    <div className="mx-auto max-w-6xl space-y-5 pb-12">
+    <div className="mx-auto max-w-6xl space-y-5 pb-12 text-slate-900">
       {/* HEADER */}
 
-      <div className="rounded-3xl bg-slate-950 p-6 text-white shadow-xl">
+      <div className="rounded-3xl bg-[#0B4D2B] p-6 text-white shadow-xl">
         <div className="flex flex-wrap items-center justify-between gap-5">
           <div>
-            <div className="text-xs font-bold uppercase tracking-[0.25em] text-slate-400">
+            <div className="text-xs font-bold uppercase tracking-[0.25em] text-green-200">
               Live Scoring
             </div>
 
@@ -1740,19 +1667,18 @@ export default function Scorer() {
               {innings.total_runs}/{innings.wickets}
             </div>
 
-            <div className="mt-2 text-lg text-slate-300">
+            <div className="mt-2 text-lg text-green-100">
               {oversText(innings.legal_balls)} / {innings.overs_limit}.0 overs
             </div>
           </div>
 
           <div className="rounded-2xl bg-white/10 px-5 py-4">
-            <div className="text-xs font-bold text-slate-400">CURRENT OVER</div>
+            <div className="text-xs font-bold text-green-200">CURRENT OVER</div>
 
             <div className="mt-1 text-3xl font-black">{currentOver}</div>
 
-            <div className="text-sm text-slate-300">
-              {ballsInCurrentOver}
-              /6 balls
+            <div className="text-sm text-green-100">
+              {ballsInCurrentOver}/6 balls
             </div>
           </div>
         </div>
@@ -1761,12 +1687,12 @@ export default function Scorer() {
       {/* OVER COMPLETE */}
 
       {showBowlerChange && (
-        <div className="rounded-2xl border-2 border-blue-300 bg-blue-50 p-5">
-          <div className="text-xl font-black text-blue-900">
+        <div className="rounded-2xl border-2 border-green-300 bg-green-50 p-5">
+          <div className="text-xl font-black text-[#0B4D2B]">
             OVER {currentOver - 1} COMPLETE
           </div>
 
-          <div className="mt-1 text-sm text-blue-700">
+          <div className="mt-1 text-sm text-green-700">
             Select the bowler for Over {currentOver}.
           </div>
 
@@ -1775,7 +1701,7 @@ export default function Scorer() {
               <button
                 key={player.id}
                 onClick={() => void selectBowler(player.id)}
-                className="rounded-xl bg-white p-4 text-left font-bold shadow-sm"
+                className="rounded-xl border border-slate-200 bg-white p-4 text-left font-bold text-slate-900 shadow-sm transition hover:border-[#0B4D2B] hover:bg-green-50"
               >
                 {player.name}
               </button>
@@ -1783,10 +1709,13 @@ export default function Scorer() {
           </div>
         </div>
       )}
+
+      {/* FIRST INNINGS COMPLETE */}
+
       {innings?.innings_number === 1 &&
         innings?.innings_status === "completed" && (
           <div className="rounded-2xl border-2 border-green-300 bg-green-50 p-5">
-            <div className="text-xl font-black text-green-900">
+            <div className="text-xl font-black text-[#0B4D2B]">
               INNINGS COMPLETE
             </div>
 
@@ -1795,23 +1724,23 @@ export default function Scorer() {
               {oversText(innings.legal_balls)} overs
             </div>
 
-            <div className="mt-4 text-lg font-black">
+            <div className="mt-4 text-lg font-black text-slate-900">
               Target: {innings.total_runs + 1}
             </div>
 
             {!showSecondInningsSetup && (
               <button
                 onClick={() => void startSecondInnings()}
-                className="mt-4 w-full rounded-xl bg-green-600 px-5 py-4 font-black text-white"
+                className="mt-4 w-full rounded-xl bg-[#0B4D2B] px-5 py-4 font-black text-white transition hover:bg-[#166534]"
               >
                 START 2ND INNINGS
               </button>
             )}
 
             {showSecondInningsSetup && (
-              <div className="mt-5 space-y-4 rounded-2xl border bg-white p-5">
+              <div className="mt-5 space-y-4 rounded-2xl border border-slate-200 bg-white p-5">
                 <div>
-                  <div className="text-lg font-black">
+                  <div className="text-lg font-black text-slate-900">
                     Second Innings Opening Setup
                   </div>
 
@@ -1821,13 +1750,16 @@ export default function Scorer() {
                 </div>
 
                 {/* STRIKER */}
+
                 <label className="block">
-                  <span className="text-sm font-semibold">Opening Striker</span>
+                  <span className="text-sm font-semibold text-slate-700">
+                    Opening Striker
+                  </span>
 
                   <select
                     value={secondStrikerId}
                     onChange={(e) => setSecondStrikerId(e.target.value)}
-                    className="mt-2 w-full rounded-xl border bg-white px-4 py-3"
+                    className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#0B4D2B] focus:ring-2 focus:ring-green-100"
                   >
                     <option value="">Select female striker</option>
 
@@ -1846,15 +1778,16 @@ export default function Scorer() {
                 </label>
 
                 {/* NON STRIKER */}
+
                 <label className="block">
-                  <span className="text-sm font-semibold">
+                  <span className="text-sm font-semibold text-slate-700">
                     Opening Non-Striker
                   </span>
 
                   <select
                     value={secondNonStrikerId}
                     onChange={(e) => setSecondNonStrikerId(e.target.value)}
-                    className="mt-2 w-full rounded-xl border bg-white px-4 py-3"
+                    className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#0B4D2B] focus:ring-2 focus:ring-green-100"
                   >
                     <option value="">Select female non-striker</option>
 
@@ -1873,13 +1806,16 @@ export default function Scorer() {
                 </label>
 
                 {/* BOWLER */}
+
                 <label className="block">
-                  <span className="text-sm font-semibold">Opening Bowler</span>
+                  <span className="text-sm font-semibold text-slate-700">
+                    Opening Bowler
+                  </span>
 
                   <select
                     value={secondBowlerId}
                     onChange={(e) => setSecondBowlerId(e.target.value)}
-                    className="mt-2 w-full rounded-xl border bg-white px-4 py-3"
+                    className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#0B4D2B] focus:ring-2 focus:ring-green-100"
                   >
                     <option value="">Select female bowler</option>
 
@@ -1895,7 +1831,7 @@ export default function Scorer() {
 
                 <button
                   onClick={() => void confirmSecondInningsStart()}
-                  className="w-full rounded-xl bg-green-600 px-5 py-4 font-black text-white"
+                  className="w-full rounded-xl bg-[#0B4D2B] px-5 py-4 font-black text-white transition hover:bg-[#166534]"
                 >
                   START INNINGS 2
                 </button>
@@ -1903,6 +1839,9 @@ export default function Scorer() {
             )}
           </div>
         )}
+
+      {/* TIE */}
+
       {isTie && !showTieWinner && (
         <div className="rounded-2xl border-2 border-yellow-300 bg-yellow-50 p-5">
           <div className="text-xl font-black text-yellow-900">MATCH TIED</div>
@@ -1921,12 +1860,10 @@ export default function Scorer() {
       )}
 
       {isTie && showTieWinner && (
-        <div className="rounded-2xl border-2 border-purple-300 bg-purple-50 p-5">
-          <div className="text-xl font-black text-purple-900">
-            SELECT WINNER
-          </div>
+        <div className="rounded-2xl border-2 border-green-300 bg-green-50 p-5">
+          <div className="text-xl font-black text-[#0B4D2B]">SELECT WINNER</div>
 
-          <div className="mt-2 text-sm text-purple-700">
+          <div className="mt-2 text-sm text-green-700">
             No Super Over. Select the team awarded the match.
           </div>
 
@@ -1935,8 +1872,8 @@ export default function Scorer() {
               onClick={() => setTieWinnerId(innings.batting_team_id)}
               className={`rounded-xl p-4 font-black ${
                 tieWinnerId === innings.batting_team_id
-                  ? "bg-purple-600 text-white"
-                  : "bg-white"
+                  ? "bg-[#0B4D2B] text-white"
+                  : "border border-slate-200 bg-white text-slate-900"
               }`}
             >
               {teamNames[innings.batting_team_id] ?? "Batting Team"}
@@ -1946,8 +1883,8 @@ export default function Scorer() {
               onClick={() => setTieWinnerId(innings.bowling_team_id)}
               className={`rounded-xl p-4 font-black ${
                 tieWinnerId === innings.bowling_team_id
-                  ? "bg-purple-600 text-white"
-                  : "bg-white"
+                  ? "bg-[#0B4D2B] text-white"
+                  : "border border-slate-200 bg-white text-slate-900"
               }`}
             >
               {teamNames[innings.bowling_team_id] ?? "Bowling Team"}
@@ -1957,19 +1894,22 @@ export default function Scorer() {
           <button
             onClick={() => void chooseTieWinner()}
             disabled={!tieWinnerId}
-            className="mt-4 w-full rounded-xl bg-green-600 px-5 py-4 font-black text-white disabled:opacity-40"
+            className="mt-4 w-full rounded-xl bg-[#0B4D2B] px-5 py-4 font-black text-white disabled:opacity-40"
           >
             CONFIRM WINNER
           </button>
         </div>
       )}
+
+      {/* MALE BATTER SELECTION */}
+
       {showMaleBatterSelection && (
-        <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-5">
-          <div className="text-xl font-black text-amber-900">
+        <div className="rounded-2xl border-2 border-green-300 bg-green-50 p-5">
+          <div className="text-xl font-black text-[#0B4D2B]">
             Opening Phase Complete
           </div>
 
-          <p className="mt-1 text-sm text-amber-700">
+          <p className="mt-1 text-sm text-green-700">
             Select the two batters for the normal phase.
           </p>
 
@@ -1980,7 +1920,7 @@ export default function Scorer() {
               <select
                 value={nextStrikerId}
                 onChange={(e) => setNextStrikerId(e.target.value)}
-                className="mt-2 w-full rounded-xl border bg-white px-4 py-3"
+                className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900"
               >
                 <option value="">Select striker</option>
 
@@ -2002,7 +1942,7 @@ export default function Scorer() {
               <select
                 value={nextNonStrikerId}
                 onChange={(e) => setNextNonStrikerId(e.target.value)}
-                className="mt-2 w-full rounded-xl border bg-white px-4 py-3"
+                className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900"
               >
                 <option value="">Select non-striker</option>
 
@@ -2020,9 +1960,9 @@ export default function Scorer() {
           <button
             disabled={!nextStrikerId || !nextNonStrikerId || busy}
             onClick={() => void startNormalPhase()}
-            className="mt-5 w-full rounded-xl bg-amber-600 px-5 py-4 font-black text-white disabled:opacity-50"
+            className="mt-5 w-full rounded-xl bg-[#0B4D2B] px-5 py-4 font-black text-white disabled:opacity-50"
           >
-            Continue to Normal Play
+            CONTINUE TO NORMAL PLAY
           </button>
         </div>
       )}
@@ -2030,84 +1970,106 @@ export default function Scorer() {
       {/* STATUS */}
 
       {message && (
-        <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 font-semibold text-blue-800">
+        <div className="rounded-xl border border-green-200 bg-green-50 p-4 font-semibold text-[#0B4D2B]">
           {message}
         </div>
       )}
 
-      {/* PLAYERS */}
+      {/* PLAYERS + LIVE STATS */}
 
       <div className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-2xl border bg-white p-5">
-          <div className="text-xs font-bold uppercase text-slate-400">
+        {/* STRIKER */}
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="text-xs font-bold uppercase tracking-wide text-slate-400">
             Striker
           </div>
 
-          <div className="mt-2 text-xl font-black">
+          <div className="mt-2 text-xl font-black text-slate-900">
             {striker?.name ?? "Select batter"}
           </div>
+
+          {striker && (
+            <div className="mt-2">
+              <span className="text-3xl font-black text-[#0B4D2B]">
+                {strikerStats.runs}
+              </span>
+
+              <span className="ml-1 text-sm font-semibold text-slate-500">
+                ({strikerStats.balls})
+              </span>
+
+              <div className="mt-1 text-xs text-slate-500">Runs (Balls)</div>
+            </div>
+          )}
         </div>
 
-        <div className="rounded-2xl border bg-white p-5">
-          <div className="text-xs font-bold uppercase text-slate-400">
+        {/* NON-STRIKER */}
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="text-xs font-bold uppercase tracking-wide text-slate-400">
             Non-Striker
           </div>
 
-          <div className="mt-2 text-xl font-black">
+          <div className="mt-2 text-xl font-black text-slate-900">
             {nonStriker?.name ?? "Select batter"}
           </div>
+
+          {nonStriker && (
+            <div className="mt-2">
+              <span className="text-3xl font-black text-[#0B4D2B]">
+                {nonStrikerStats.runs}
+              </span>
+
+              <span className="ml-1 text-sm font-semibold text-slate-500">
+                ({nonStrikerStats.balls})
+              </span>
+
+              <div className="mt-1 text-xs text-slate-500">Runs (Balls)</div>
+            </div>
+          )}
         </div>
 
-        <div className="rounded-2xl border bg-white p-5">
-          <div className="text-xs font-bold uppercase text-slate-400">
+        {/* BOWLER */}
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="text-xs font-bold uppercase tracking-wide text-slate-400">
             Bowler
           </div>
 
-          <div className="mt-2 text-xl font-black">
+          <div className="mt-2 text-xl font-black text-slate-900">
             {bowler?.name ?? "Select bowler"}
           </div>
 
+          {bowler && (
+            <div className="mt-2">
+              <span className="text-3xl font-black text-[#0B4D2B]">
+                {bowlerStats.wickets}
+              </span>
+
+              <span className="mx-1 text-2xl font-black text-slate-300">/</span>
+
+              <span className="text-3xl font-black text-[#0B4D2B]">
+                {bowlerStats.runs}
+              </span>
+
+              <div className="mt-1 text-xs text-slate-500">Wickets / Runs</div>
+            </div>
+          )}
+
           <button
             onClick={() => setShowBowlerChange(true)}
-            className="mt-3 rounded-lg bg-slate-100 px-3 py-2 text-sm font-bold"
+            className="mt-3 rounded-lg bg-green-50 px-3 py-2 text-sm font-bold text-[#0B4D2B] transition hover:bg-green-100"
           >
             Change Bowler
           </button>
         </div>
       </div>
 
-      {/* THIS OVER */}
-
-      <div className="rounded-2xl border bg-white p-5">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="font-black">This Over</h2>
-
-          <span className="text-sm text-slate-500">Over {currentOver}</span>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          {currentOverBalls.length === 0 ? (
-            <span className="text-sm text-slate-400">
-              No balls recorded yet.
-            </span>
-          ) : (
-            currentOverBalls.map((ball) => (
-              <button
-                key={ball.id}
-                onClick={() => openEdit(ball)}
-                className="flex h-12 min-w-12 items-center justify-center rounded-full bg-slate-100 px-3 font-black hover:bg-slate-200"
-              >
-                {ballLabel(ball)}
-              </button>
-            ))
-          )}
-        </div>
-      </div>
-
       {/* SCORING */}
 
-      <div className="rounded-2xl border bg-white p-5">
-        <div className="mb-4 font-black">Score</div>
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="mb-4 font-black text-slate-900">Score</div>
 
         <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
           {[0, 1, 2, 3, 4, 6].map((runs) => (
@@ -2115,7 +2077,7 @@ export default function Scorer() {
               key={runs}
               disabled={busy || showBowlerChange}
               onClick={() => void addRuns(runs)}
-              className="rounded-2xl border-2 bg-white py-6 text-2xl font-black shadow-sm transition hover:bg-slate-50 active:scale-95 disabled:opacity-40"
+              className="rounded-2xl border-2 border-slate-200 bg-white py-6 text-2xl font-black text-slate-900 shadow-sm transition hover:border-[#0B4D2B] hover:bg-green-50 active:scale-95 disabled:opacity-40"
             >
               {runs}
             </button>
@@ -2168,6 +2130,7 @@ export default function Scorer() {
               <div className="text-lg font-black text-red-900">
                 Record Wicket
               </div>
+
               <div className="text-sm text-red-700">
                 Select how the wicket occurred.
               </div>
@@ -2187,7 +2150,7 @@ export default function Scorer() {
                 key={type}
                 disabled={busy}
                 onClick={() => void recordWicket(type)}
-                className="rounded-xl bg-white p-4 text-left font-bold capitalize shadow-sm transition hover:bg-red-100 disabled:opacity-50"
+                className="rounded-xl bg-white p-4 text-left font-bold capitalize text-slate-900 shadow-sm transition hover:bg-red-100 disabled:opacity-50"
               >
                 {type.replace("_", " ")}
               </button>
@@ -2199,15 +2162,15 @@ export default function Scorer() {
       {/* NEW BATTER */}
 
       {innings.striker_id === null && innings.wickets > 0 && (
-        <div className="rounded-2xl border-2 border-emerald-200 bg-emerald-50 p-5">
-          <div className="font-black text-emerald-900">Select next batter</div>
+        <div className="rounded-2xl border-2 border-green-200 bg-green-50 p-5">
+          <div className="font-black text-[#0B4D2B]">Select next batter</div>
 
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
             {availableNewBatters.map((player) => (
               <button
                 key={player.id}
                 onClick={() => void selectNextBatter(player.id)}
-                className="rounded-xl bg-white p-4 text-left font-bold shadow-sm"
+                className="rounded-xl bg-white p-4 text-left font-bold text-slate-900 shadow-sm transition hover:bg-green-50"
               >
                 {player.name}
               </button>
@@ -2219,10 +2182,10 @@ export default function Scorer() {
       {/* FEMALE RETURN */}
 
       {eligibleReturns.length > 0 && (
-        <div className="rounded-2xl border bg-white p-5">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <button
             onClick={() => setShowReturn(!showReturn)}
-            className="font-black"
+            className="font-black text-[#0B4D2B]"
           >
             {showReturn ? "Hide" : "Show"} eligible return players
           </button>
@@ -2233,7 +2196,7 @@ export default function Scorer() {
                 <button
                   key={player.id}
                   onClick={() => void returnFemale(player.id)}
-                  className="rounded-xl bg-slate-100 p-3 text-left font-bold"
+                  className="rounded-xl bg-green-50 p-3 text-left font-bold text-[#0B4D2B] hover:bg-green-100"
                 >
                   {player.name}
                 </button>
@@ -2245,9 +2208,9 @@ export default function Scorer() {
 
       {/* COMPLETE BALL HISTORY */}
 
-      <div className="rounded-2xl border bg-white p-5">
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="font-black">Ball-by-Ball</h2>
+          <h2 className="font-black text-slate-900">Ball-by-Ball</h2>
 
           <span className="text-sm text-slate-500">{balls.length} events</span>
         </div>
@@ -2265,7 +2228,7 @@ export default function Scorer() {
                 <button
                   key={ball.id}
                   onClick={() => openEdit(ball)}
-                  className="w-full rounded-xl border bg-white p-3 text-left hover:bg-slate-50"
+                  className="w-full rounded-xl border border-slate-200 bg-white p-3 text-left transition hover:border-[#0B4D2B] hover:bg-green-50"
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
@@ -2274,7 +2237,7 @@ export default function Scorer() {
                       </div>
 
                       <div>
-                        <div className="font-bold">
+                        <div className="font-bold text-slate-900">
                           {ballStriker?.name ?? "Unknown"}
                         </div>
 
@@ -2284,7 +2247,9 @@ export default function Scorer() {
                       </div>
                     </div>
 
-                    <div className="text-xl font-black">{ballLabel(ball)}</div>
+                    <div className="text-xl font-black text-slate-900">
+                      {ballLabel(ball)}
+                    </div>
                   </div>
                 </button>
               );
@@ -2298,13 +2263,13 @@ export default function Scorer() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
             <div className="flex items-center justify-between">
-              <h2 className="text-xl font-black">
+              <h2 className="text-xl font-black text-slate-900">
                 Edit Ball {editingBall.over_number}.{editingBall.ball_number}
               </h2>
 
               <button
                 onClick={() => setEditingBall(null)}
-                className="rounded-full bg-slate-100 px-3 py-2 font-bold"
+                className="rounded-full bg-slate-100 px-3 py-2 font-bold text-slate-700"
               >
                 ×
               </button>
@@ -2312,7 +2277,7 @@ export default function Scorer() {
 
             <div className="mt-6 space-y-5">
               <div>
-                <label className="text-sm font-bold">Runs</label>
+                <label className="text-sm font-bold text-slate-700">Runs</label>
 
                 <div className="mt-2 grid grid-cols-4 gap-2">
                   {[0, 1, 2, 3, 4, 6].map((runs) => (
@@ -2321,8 +2286,8 @@ export default function Scorer() {
                       onClick={() => setEditRuns(runs)}
                       className={`rounded-xl border p-3 font-black ${
                         editRuns === runs
-                          ? "bg-slate-900 text-white"
-                          : "bg-white"
+                          ? "bg-[#0B4D2B] text-white"
+                          : "bg-white text-slate-900"
                       }`}
                     >
                       {runs}
@@ -2332,12 +2297,14 @@ export default function Scorer() {
               </div>
 
               <div>
-                <label className="text-sm font-bold">Event</label>
+                <label className="text-sm font-bold text-slate-700">
+                  Event
+                </label>
 
                 <select
                   value={editEvent}
                   onChange={(e) => setEditEvent(e.target.value)}
-                  className="mt-2 w-full rounded-xl border p-3"
+                  className="mt-2 w-full rounded-xl border border-slate-300 bg-white p-3 text-slate-900"
                 >
                   <option value="">Normal</option>
 
@@ -2363,18 +2330,20 @@ export default function Scorer() {
                   className="h-5 w-5"
                 />
 
-                <span className="font-bold">Wicket</span>
+                <span className="font-bold text-slate-900">Wicket</span>
               </label>
 
               {editWicket && (
                 <>
                   <div>
-                    <label className="text-sm font-bold">Wicket type</label>
+                    <label className="text-sm font-bold text-slate-700">
+                      Wicket type
+                    </label>
 
                     <select
                       value={editWicketType}
                       onChange={(e) => setEditWicketType(e.target.value)}
-                      className="mt-2 w-full rounded-xl border p-3"
+                      className="mt-2 w-full rounded-xl border border-slate-300 bg-white p-3 text-slate-900"
                     >
                       {WICKET_TYPES.map((type) => (
                         <option key={type} value={type}>
@@ -2385,14 +2354,14 @@ export default function Scorer() {
                   </div>
 
                   <div>
-                    <label className="text-sm font-bold">
+                    <label className="text-sm font-bold text-slate-700">
                       Dismissed player
                     </label>
 
                     <select
                       value={editDismissedPlayer}
                       onChange={(e) => setEditDismissedPlayer(e.target.value)}
-                      className="mt-2 w-full rounded-xl border p-3"
+                      className="mt-2 w-full rounded-xl border border-slate-300 bg-white p-3 text-slate-900"
                     >
                       <option value="">Select player</option>
 
@@ -2409,7 +2378,7 @@ export default function Scorer() {
               <button
                 disabled={busy}
                 onClick={() => void saveBallEdit()}
-                className="w-full rounded-2xl bg-slate-950 p-4 font-black text-white disabled:opacity-50"
+                className="w-full rounded-2xl bg-[#0B4D2B] p-4 font-black text-white transition hover:bg-[#166534] disabled:opacity-50"
               >
                 SAVE CHANGES
               </button>

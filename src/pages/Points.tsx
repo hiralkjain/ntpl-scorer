@@ -45,8 +45,7 @@ export default function Points({
 
       const completedLeagueMatches = matches.filter(
         (match) =>
-          match.match_type === "league" &&
-          match.status === "completed"
+          match.match_type === "league" && match.status === "completed",
       );
 
       if (completedLeagueMatches.length === 0) {
@@ -62,7 +61,7 @@ export default function Points({
       const { data, error } = await supabase
         .from("innings")
         .select(
-          "match_id, batting_team_id, total_runs, wickets, legal_balls, overs_limit"
+          "match_id, batting_team_id, total_runs, wickets, legal_balls, overs_limit",
         )
         .in("match_id", matchIds);
 
@@ -90,7 +89,7 @@ export default function Points({
       match.match_type === "league" &&
       match.status === "completed" &&
       match.team_a_id &&
-      match.team_b_id
+      match.team_b_id,
   );
 
   const standings: Standing[] = teams.map((team) => ({
@@ -108,7 +107,7 @@ export default function Points({
   }));
 
   const standingById = new Map(
-    standings.map((standing) => [standing.team.id, standing])
+    standings.map((standing) => [standing.team.id, standing]),
   );
 
   for (const match of completedMatches) {
@@ -117,6 +116,7 @@ export default function Points({
 
     const a = standingById.get(teamA);
     const b = standingById.get(teamB);
+
     if (!a || !b) continue;
 
     a.played++;
@@ -140,15 +140,17 @@ export default function Points({
 
   for (const match of completedMatches) {
     const matchInnings = innings.filter(
-      (inning) => inning.match_id === match.id
+      (inning) => inning.match_id === match.id,
     );
 
     for (const inning of matchInnings) {
       const batting = standingById.get(inning.batting_team_id);
+
       const bowlingTeamId =
         inning.batting_team_id === match.team_a_id
           ? match.team_b_id
           : match.team_a_id;
+
       const bowling = bowlingTeamId
         ? standingById.get(bowlingTeamId)
         : undefined;
@@ -161,8 +163,7 @@ export default function Points({
       const oversLimit = Number(inning.overs_limit) || 7;
 
       // With 9 players, 8 wickets means the team is all out.
-      const ballsForNRR =
-        wickets >= 8 ? oversLimit * 6 : legalBalls;
+      const ballsForNRR = wickets >= 8 ? oversLimit * 6 : legalBalls;
 
       batting.runsScored += runs;
       batting.ballsFaced += ballsForNRR;
@@ -178,8 +179,7 @@ export default function Points({
 
     standing.nrr =
       oversFaced > 0 && oversBowled > 0
-        ? standing.runsScored / oversFaced -
-          standing.runsConceded / oversBowled
+        ? standing.runsScored / oversFaced - standing.runsConceded / oversBowled
         : 0;
   }
 
@@ -187,7 +187,7 @@ export default function Points({
     (a, b) =>
       b.points - a.points ||
       b.nrr - a.nrr ||
-      a.team.name.localeCompare(b.team.name)
+      a.team.name.localeCompare(b.team.name),
   );
 
   return (
@@ -204,9 +204,9 @@ export default function Points({
         <p className="text-sm text-slate-500">Calculating standings...</p>
       ) : (
         <>
-          <div className="overflow-x-auto rounded-2xl border bg-white shadow-sm">
+          <div className="overflow-x-auto rounded-2xl border border-[#0B4D2B] bg-[#0B4D2B] shadow-sm">
             <table className="w-full min-w-[650px] text-left text-sm">
-              <thead className="bg-slate-950 text-white">
+              <thead className="bg-[#0B4D2B] text-white">
                 <tr>
                   <th className="px-4 py-3">#</th>
                   <th className="px-4 py-3">Team</th>
@@ -223,36 +223,34 @@ export default function Points({
                 {standings.map((standing, index) => (
                   <tr
                     key={standing.team.id}
-                    className={`border-t ${
-                      index < 2 ? "bg-green-50" : ""
-                    }`}
+                    className={`border-t border-white/20 ${
+                      index < 2 ? "bg-[#166534]" : "bg-[#0B4D2B]"
+                    } text-white`}
                   >
-                    <td className="px-4 py-4 font-bold">
-                      {index + 1}
-                    </td>
+                    <td className="px-4 py-4 font-bold">{index + 1}</td>
+
                     <td className="px-4 py-4 font-semibold">
                       {standing.team.name}
+
                       {index < 2 && (
-                        <span className="ml-2 text-xs font-medium text-green-700">
+                        <span className="ml-2 text-xs font-medium text-green-200">
                           Final
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-4 text-center">
-                      {standing.played}
-                    </td>
-                    <td className="px-4 py-4 text-center">
-                      {standing.won}
-                    </td>
-                    <td className="px-4 py-4 text-center">
-                      {standing.lost}
-                    </td>
-                    <td className="px-4 py-4 text-center">
-                      {standing.tied}
-                    </td>
+
+                    <td className="px-4 py-4 text-center">{standing.played}</td>
+
+                    <td className="px-4 py-4 text-center">{standing.won}</td>
+
+                    <td className="px-4 py-4 text-center">{standing.lost}</td>
+
+                    <td className="px-4 py-4 text-center">{standing.tied}</td>
+
                     <td className="px-4 py-4 text-center font-bold">
                       {standing.points}
                     </td>
+
                     <td className="px-4 py-4 text-center">
                       {standing.nrr.toFixed(3)}
                     </td>
@@ -263,11 +261,13 @@ export default function Points({
           </div>
 
           <p className="text-sm text-slate-500">
-            P: Played · W: Won · L: Lost · T: Tie · Pts: Points · NRR: Net Run Rate
+            P: Played · W: Won · L: Lost · T: Tie · Pts: Points · NRR: Net Run
+            Rate
           </p>
+
           <p className="text-sm text-slate-500">
-            Wins earn 2 points. Unresolved ties and no-result matches earn
-            1 point per team. The top two teams are highlighted.
+            Wins earn 2 points. Unresolved ties and no-result matches earn 1
+            point per team. The top two teams are highlighted.
           </p>
         </>
       )}

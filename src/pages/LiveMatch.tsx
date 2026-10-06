@@ -348,7 +348,7 @@ export default function LiveMatch() {
 
   if (loading) {
     return (
-      <div className="rounded-2xl border bg-white p-8 text-center">
+      <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center">
         Loading scorecard...
       </div>
     );
@@ -364,7 +364,7 @@ export default function LiveMatch() {
 
   if (!match) {
     return (
-      <div className="rounded-2xl border bg-white p-8 text-center">
+      <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center">
         Match not found.
       </div>
     );
@@ -375,8 +375,6 @@ export default function LiveMatch() {
     innings[innings.length - 1];
 
   const firstInnings = innings.find((i) => i.innings_number === 1);
-
-  const secondInnings = innings.find((i) => i.innings_number === 2);
 
   const battingTeam = currentInnings
     ? teams[currentInnings.batting_team_id]
@@ -660,9 +658,9 @@ export default function LiveMatch() {
     ];
 
     return (
-      <div className="overflow-hidden rounded-3xl border bg-white shadow-sm">
-        <div className="bg-slate-950 p-5 text-white">
-          <div className="text-sm font-semibold text-slate-300">
+      <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <div className="bg-[#0B4D2B] p-5 text-white">
+          <div className="text-sm font-semibold text-green-100">
             Innings {inning.innings_number}
           </div>
 
@@ -670,7 +668,7 @@ export default function LiveMatch() {
             <div>
               <h2 className="text-2xl font-black">{team?.name ?? "Team"}</h2>
 
-              <p className="mt-1 text-sm text-slate-400">
+              <p className="mt-1 text-sm text-green-100">
                 vs {bowling?.name ?? "Team"}
               </p>
             </div>
@@ -680,7 +678,7 @@ export default function LiveMatch() {
                 {inning.total_runs}/{inning.wickets}
               </div>
 
-              <div className="text-sm text-slate-400">
+              <div className="text-sm text-green-100">
                 {oversText(inning.legal_balls)} overs
               </div>
             </div>
@@ -689,7 +687,7 @@ export default function LiveMatch() {
 
         <div className="overflow-x-auto">
           <table className="w-full min-w-[680px] text-sm">
-            <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+            <thead className="bg-[#0B4D2B] text-xs uppercase text-white">
               <tr>
                 <th className="px-4 py-3 text-left">Batter</th>
                 <th className="px-3 py-3 text-left">Dismissal</th>
@@ -701,13 +699,13 @@ export default function LiveMatch() {
               </tr>
             </thead>
 
-            <tbody className="divide-y">
+            <tbody className="divide-y text-slate-900">
               {orderedBatting.map((stat) => {
                 const player = players[stat.playerId];
 
                 return (
                   <tr key={stat.playerId}>
-                    <td className="px-4 py-3 font-bold">
+                    <td className="px-4 py-3 font-bold text-slate-900">
                       {player?.name ?? "Player"}
                     </td>
 
@@ -715,17 +713,23 @@ export default function LiveMatch() {
                       {stat.dismissal || "not out"}
                     </td>
 
-                    <td className="px-3 py-3 text-right font-black">
+                    <td className="px-3 py-3 text-right font-black text-slate-900">
                       {stat.runs}
                     </td>
 
-                    <td className="px-3 py-3 text-right">{stat.balls}</td>
+                    <td className="px-3 py-3 text-right text-slate-900">
+                      {stat.balls}
+                    </td>
 
-                    <td className="px-3 py-3 text-right">{stat.fours}</td>
+                    <td className="px-3 py-3 text-right text-slate-900">
+                      {stat.fours}
+                    </td>
 
-                    <td className="px-3 py-3 text-right">{stat.sixes}</td>
+                    <td className="px-3 py-3 text-right text-slate-900">
+                      {stat.sixes}
+                    </td>
 
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-4 py-3 text-right text-slate-900">
                       {strikeRate(stat.runs, stat.balls)}
                     </td>
                   </tr>
@@ -735,7 +739,7 @@ export default function LiveMatch() {
           </table>
         </div>
 
-        <div className="border-t bg-slate-50 p-4">
+        <div className="border-t bg-green-50 p-4">
           <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
             <span>
               <strong>Extras:</strong>{" "}
@@ -747,13 +751,9 @@ export default function LiveMatch() {
             </span>
 
             {extras.wides > 0 && <span>W {extras.wides}</span>}
-
             {extras.noBalls > 0 && <span>NB {extras.noBalls}</span>}
-
             {extras.byes > 0 && <span>B {extras.byes}</span>}
-
             {extras.legByes > 0 && <span>LB {extras.legByes}</span>}
-
             {extras.penalty > 0 && <span>P {extras.penalty}</span>}
 
             {extras.adjustments !== 0 && (
@@ -767,13 +767,13 @@ export default function LiveMatch() {
           </div>
         </div>
 
-        <div className="overflow-x-auto border-t">
+        <div className="overflow-x-auto border-t border-slate-200 bg-white">
           <div className="p-5 pb-3">
-            <h3 className="text-lg font-black">Bowling</h3>
+            <h3 className="text-lg font-black text-slate-900">Bowling</h3>
           </div>
 
           <table className="w-full min-w-[600px] text-sm">
-            <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+            <thead className="bg-[#0B4D2B] text-xs uppercase text-white">
               <tr>
                 <th className="px-4 py-3 text-left">Bowler</th>
                 <th className="px-3 py-3 text-right">O</th>
@@ -785,23 +785,25 @@ export default function LiveMatch() {
               </tr>
             </thead>
 
-            <tbody className="divide-y">
+            <tbody className="divide-y text-slate-900">
               {bowlingStats.map((stat) => {
                 const player = players[stat.playerId];
 
                 return (
                   <tr key={stat.playerId}>
-                    <td className="px-4 py-3 font-bold">
+                    <td className="px-4 py-3 font-bold text-slate-900">
                       {player?.name ?? "Bowler"}
                     </td>
 
-                    <td className="px-3 py-3 text-right">
+                    <td className="px-3 py-3 text-right text-slate-900">
                       {oversText(stat.balls)}
                     </td>
 
-                    <td className="px-3 py-3 text-right">{stat.runs}</td>
+                    <td className="px-3 py-3 text-right text-slate-900">
+                      {stat.runs}
+                    </td>
 
-                    <td className="px-3 py-3 text-right font-black">
+                    <td className="px-3 py-3 text-right font-black text-slate-900">
                       {stat.wickets}
                     </td>
 
@@ -809,7 +811,7 @@ export default function LiveMatch() {
 
                     <td className="px-3 py-3 text-right">{stat.noBalls}</td>
 
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-4 py-3 text-right text-slate-900">
                       {economy(stat.runs, stat.balls)}
                     </td>
                   </tr>
@@ -821,13 +823,15 @@ export default function LiveMatch() {
 
         {fallOfWickets.length > 0 && (
           <div className="border-t p-5">
-            <h3 className="text-lg font-black">Fall of Wickets</h3>
+            <h3 className="text-lg font-black text-slate-900">
+              Fall of Wickets
+            </h3>
 
             <div className="mt-3 flex flex-wrap gap-2">
               {fallOfWickets.map((item) => (
                 <div
                   key={`${item.wicket}-${item.player}`}
-                  className="rounded-xl bg-slate-50 px-3 py-2 text-xs"
+                  className="rounded-xl bg-green-50 px-3 py-2 text-xs"
                 >
                   <span className="font-black">
                     {item.wicket}-{item.score}
@@ -847,7 +851,7 @@ export default function LiveMatch() {
   const isCompleted = match.status === "completed";
 
   return (
-    <div className="space-y-6">
+    <div className="min-h-screen space-y-6 rounded-3xl bg-slate-50 p-4 md:p-6">
       <div>
         <p
           className={`text-sm font-bold ${
@@ -868,9 +872,9 @@ export default function LiveMatch() {
 
       {!isCompleted && (
         <>
-          <div className="overflow-hidden rounded-3xl bg-slate-950 text-white shadow-lg">
+          <div className="overflow-hidden rounded-3xl bg-[#0B4D2B] text-white shadow-lg">
             <div className="p-6 text-center">
-              <div className="text-sm font-semibold text-slate-300">
+              <div className="text-sm font-semibold text-green-100">
                 {battingTeam?.name ?? "Batting Team"}
               </div>
 
@@ -878,18 +882,18 @@ export default function LiveMatch() {
                 {currentInnings?.total_runs ?? 0}/{currentInnings?.wickets ?? 0}
               </div>
 
-              <div className="mt-2 text-lg text-slate-300">
+              <div className="mt-2 text-lg text-green-100">
                 {oversText(currentInnings?.legal_balls ?? 0)} /{" "}
                 {currentInnings?.overs_limit ?? 7} overs
               </div>
 
               {target !== null && (
                 <div className="mt-4 rounded-xl bg-white/10 p-3">
-                  <div className="text-sm text-slate-300">Target</div>
+                  <div className="text-sm text-green-100">Target</div>
 
                   <div className="text-xl font-bold">{target}</div>
 
-                  <div className="mt-1 text-sm text-slate-300">
+                  <div className="mt-1 text-sm text-green-100">
                     {requiredRuns === 0
                       ? "Target reached"
                       : `${requiredRuns} runs required`}
@@ -900,7 +904,7 @@ export default function LiveMatch() {
 
             <div className="grid grid-cols-2 border-t border-white/10">
               <div className="p-4 text-center">
-                <div className="text-xs text-slate-400">Batting</div>
+                <div className="text-xs text-green-200">Batting</div>
 
                 <div className="mt-1 font-bold">
                   {battingTeam?.short_name ?? "—"}
@@ -908,7 +912,7 @@ export default function LiveMatch() {
               </div>
 
               <div className="border-l border-white/10 p-4 text-center">
-                <div className="text-xs text-slate-400">Bowling</div>
+                <div className="text-xs text-green-200">Bowling</div>
 
                 <div className="mt-1 font-bold">
                   {bowlingTeam?.short_name ?? "—"}
@@ -917,33 +921,43 @@ export default function LiveMatch() {
             </div>
           </div>
 
-          <div className="rounded-2xl border bg-white p-5 shadow-sm">
-            <h2 className="text-lg font-black">Current Batters</h2>
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-lg font-black text-slate-900">
+              Current Batters
+            </h2>
 
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <div className="rounded-xl bg-slate-50 p-4">
+              <div className="rounded-xl bg-green-50 p-4 text-slate-900">
                 <div className="text-xs text-slate-500">Striker</div>
 
-                <div className="mt-1 font-bold">{striker?.name ?? "—"} *</div>
+                <div className="mt-1 font-bold text-slate-900">
+                  {striker?.name ?? "—"} *
+                </div>
               </div>
 
-              <div className="rounded-xl bg-slate-50 p-4">
+              <div className="rounded-xl bg-green-50 p-4 text-slate-900">
                 <div className="text-xs text-slate-500">Non-striker</div>
 
-                <div className="mt-1 font-bold">{nonStriker?.name ?? "—"}</div>
+                <div className="mt-1 font-bold text-slate-900">
+                  {nonStriker?.name ?? "—"}
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="rounded-2xl border bg-white p-5 shadow-sm">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 text-slate-900 shadow-sm">
             <div className="text-xs text-slate-500">Current Bowler</div>
 
-            <div className="mt-1 text-lg font-black">{bowler?.name ?? "—"}</div>
+            <div className="mt-1 text-lg font-black text-slate-900">
+              {bowler?.name ?? "—"}
+            </div>
           </div>
 
-          <div className="rounded-2xl border bg-white p-5 shadow-sm">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-black">Recent Balls</h2>
+              <h2 className="text-lg font-black text-slate-900">
+                Recent Balls
+              </h2>
 
               <span className="text-sm text-slate-500">
                 {oversText(currentInnings?.legal_balls ?? 0)} overs
@@ -964,7 +978,7 @@ export default function LiveMatch() {
                         ? "border-red-200 bg-red-50 text-red-600"
                         : ball.runs_batter >= 4
                           ? "border-green-200 bg-green-50 text-green-700"
-                          : "bg-slate-50"
+                          : "border-green-100 bg-green-50 text-[#0B4D2B]"
                     }`}
                   >
                     {ballLabel(ball)}
@@ -977,8 +991,8 @@ export default function LiveMatch() {
       )}
 
       {isCompleted && (
-        <div className="overflow-hidden rounded-3xl bg-slate-950 p-6 text-center text-white shadow-lg">
-          <div className="text-sm text-slate-400">MATCH RESULT</div>
+        <div className="overflow-hidden rounded-3xl bg-[#0B4D2B] p-6 text-center text-white shadow-lg">
+          <div className="text-sm text-green-200">MATCH RESULT</div>
 
           <div className="mt-2 text-2xl font-black">{resultText()}</div>
 
@@ -988,7 +1002,7 @@ export default function LiveMatch() {
 
               return (
                 <div key={inning.id} className="rounded-xl bg-white/10 p-4">
-                  <div className="text-xs text-slate-400">
+                  <div className="text-xs text-green-200">
                     {team?.short_name}
                   </div>
 
@@ -996,7 +1010,7 @@ export default function LiveMatch() {
                     {inning.total_runs}/{inning.wickets}
                   </div>
 
-                  <div className="text-xs text-slate-400">
+                  <div className="text-xs text-green-200">
                     {oversText(inning.legal_balls)} overs
                   </div>
                 </div>
@@ -1011,30 +1025,29 @@ export default function LiveMatch() {
           <ScorecardInnings key={inning.id} inning={inning} />
         ))}
       </div>
-    
 
-      <div className="rounded-3xl border bg-white p-6 shadow-sm">
-        <h2 className="text-xl font-black">Match Awards</h2>
+      <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="text-xl font-black text-slate-900">Match Awards</h2>
 
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <div className="rounded-2xl bg-slate-50 p-5">
-            <div className="text-xs font-bold uppercase text-slate-500">
+          <div className="rounded-2xl bg-green-50 p-5 text-slate-900">
+            <div className="text-xs font-bold uppercase text-[#0B4D2B]">
               Man of the Match
             </div>
 
-            <div className="mt-2 text-lg font-black">
+            <div className="mt-2 text-lg font-black text-slate-900">
               {match.man_of_match_player_id
                 ? (players[match.man_of_match_player_id]?.name ?? "Player")
                 : "Not selected yet"}
             </div>
           </div>
 
-          <div className="rounded-2xl bg-slate-50 p-5">
-            <div className="text-xs font-bold uppercase text-slate-500">
+          <div className="rounded-2xl bg-green-50 p-5 text-slate-900">
+            <div className="text-xs font-bold uppercase text-[#0B4D2B]">
               Woman of the Match
             </div>
 
-            <div className="mt-2 text-lg font-black">
+            <div className="mt-2 text-lg font-black text-slate-900">
               {match.woman_of_match_player_id
                 ? (players[match.woman_of_match_player_id]?.name ?? "Player")
                 : "Not selected yet"}

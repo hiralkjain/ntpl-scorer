@@ -54,14 +54,14 @@ export default function AdminLogin() {
 
   return (
     <div className="mx-auto max-w-md">
-      <div className="rounded-2xl border bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-black">Staff Login</h1>
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 text-slate-900 shadow-sm">
+        <h1 className="text-2xl font-black text-slate-900">Staff Login</h1>
 
         <p className="mt-1 text-sm text-slate-500">Admin access only.</p>
 
         <form onSubmit={login} className="mt-6 space-y-4">
           <input
-            className="w-full rounded-xl border px-4 py-3"
+            className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#0B4D2B] focus:ring-2 focus:ring-green-100"
             type="email"
             placeholder="Email"
             value={email}
@@ -70,7 +70,7 @@ export default function AdminLogin() {
           />
 
           <input
-            className="w-full rounded-xl border px-4 py-3"
+            className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#0B4D2B] focus:ring-2 focus:ring-green-100"
             type="password"
             placeholder="Password"
             value={password}
@@ -81,7 +81,7 @@ export default function AdminLogin() {
           <button
             type="submit"
             disabled={busy}
-            className="w-full rounded-xl bg-slate-950 px-4 py-3 font-bold text-white disabled:opacity-50"
+            className="w-full rounded-xl bg-[#0B4D2B] px-4 py-3 font-bold text-white hover:bg-[#166534] disabled:opacity-50"
           >
             {busy ? "Checking..." : "Login"}
           </button>
