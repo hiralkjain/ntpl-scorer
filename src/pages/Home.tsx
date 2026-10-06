@@ -23,7 +23,7 @@ export default function Home({
         <p className="text-sm text-green-100">CRICKET TOURNAMENT</p>
 
         <h1 className="mt-2 text-3xl font-black md:text-5xl">
-          {tournament.name}
+          NTPL Bangalore 2026
         </h1>
 
         <p className="mt-4 max-w-2xl text-green-100">

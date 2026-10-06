@@ -44,6 +44,14 @@ export default function MatchSetup() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  const [newPlayerNameA, setNewPlayerNameA] = useState("");
+  const [newPlayerGenderA, setNewPlayerGenderA] = useState("male");
+  const [newPlayerNameB, setNewPlayerNameB] = useState("");
+  const [newPlayerGenderB, setNewPlayerGenderB] = useState("male");
+  const [addingPlayerTeamId, setAddingPlayerTeamId] = useState<string | null>(
+    null,
+  );
+
   useEffect(() => {
     if (!matchId) return;
 
@@ -360,6 +368,71 @@ export default function MatchSetup() {
     }
   }
 
+  async function addNewPlayer(teamId: string) {
+    const isTeamA = teamId === match?.team_a_id;
+    const name = (isTeamA ? newPlayerNameA : newPlayerNameB).trim();
+    const gender = isTeamA ? newPlayerGenderA : newPlayerGenderB;
+
+    if (!name) {
+      setMessage("Enter the player's name.");
+      return;
+    }
+
+    if (!match || !teamId) return;
+
+    const alreadyExists = players.some(
+      (player) =>
+        player.team_id === teamId &&
+        player.name.trim().toLowerCase() === name.toLowerCase(),
+    );
+
+    if (alreadyExists) {
+      setMessage(`A player named "${name}" already exists in this team.`);
+      return;
+    }
+
+    setAddingPlayerTeamId(teamId);
+    setMessage("");
+
+    try {
+      const { data, error } = await supabase
+        .from("players")
+        .insert({
+          team_id: teamId,
+          name,
+          gender,
+          jersey_number: null,
+          role: null,
+        })
+        .select("id,team_id,name,jersey_number,role,gender")
+        .single();
+
+      if (error) throw error;
+
+      const newPlayer = data as Player;
+
+      setPlayers((current) =>
+        [...current, newPlayer].sort((a, b) => a.name.localeCompare(b.name)),
+      );
+
+      if (isTeamA) {
+        setNewPlayerNameA("");
+        setNewPlayerGenderA("male");
+      } else {
+        setNewPlayerNameB("");
+        setNewPlayerGenderB("male");
+      }
+
+      setMessage(`${name} added. Select the player from the list above.`);
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Could not add the player.",
+      );
+    } finally {
+      setAddingPlayerTeamId(null);
+    }
+  }
+
   function playerButton(
     player: Player,
     selected: string[],
@@ -459,6 +532,42 @@ export default function MatchSetup() {
               .filter((p) => p.team_id === match.team_a_id)
               .map((p) => playerButton(p, selectedA, setSelectedA))}
           </div>
+
+          <div className="mt-5 rounded-xl border border-dashed border-green-300 bg-green-50/60 p-4">
+            <div className="text-sm font-black text-slate-900">
+              Add new player
+            </div>
+
+            <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_150px_auto]">
+              <input
+                type="text"
+                value={newPlayerNameA}
+                onChange={(e) => setNewPlayerNameA(e.target.value)}
+                placeholder="Player name"
+                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#0B4D2B] focus:ring-2 focus:ring-green-100"
+              />
+
+              <select
+                value={newPlayerGenderA}
+                onChange={(e) => setNewPlayerGenderA(e.target.value)}
+                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-[#0B4D2B] focus:ring-2 focus:ring-green-100"
+              >
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+              </select>
+
+              <button
+                type="button"
+                onClick={() => void addNewPlayer(match.team_a_id ?? "")}
+                disabled={
+                  !match.team_a_id || addingPlayerTeamId === match.team_a_id
+                }
+                className="rounded-xl bg-[#0B4D2B] px-4 py-2.5 text-sm font-black text-white transition hover:bg-[#166534] disabled:opacity-50"
+              >
+                {addingPlayerTeamId === match.team_a_id ? "ADDING..." : "+ ADD"}
+              </button>
+            </div>
+          </div>
         </section>
 
         {/* Team B */}
@@ -487,6 +596,42 @@ export default function MatchSetup() {
             {players
               .filter((p) => p.team_id === match.team_b_id)
               .map((p) => playerButton(p, selectedB, setSelectedB))}
+          </div>
+
+          <div className="mt-5 rounded-xl border border-dashed border-green-300 bg-green-50/60 p-4">
+            <div className="text-sm font-black text-slate-900">
+              Add new player
+            </div>
+
+            <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_150px_auto]">
+              <input
+                type="text"
+                value={newPlayerNameB}
+                onChange={(e) => setNewPlayerNameB(e.target.value)}
+                placeholder="Player name"
+                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#0B4D2B] focus:ring-2 focus:ring-green-100"
+              />
+
+              <select
+                value={newPlayerGenderB}
+                onChange={(e) => setNewPlayerGenderB(e.target.value)}
+                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-[#0B4D2B] focus:ring-2 focus:ring-green-100"
+              >
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+              </select>
+
+              <button
+                type="button"
+                onClick={() => void addNewPlayer(match.team_b_id ?? "")}
+                disabled={
+                  !match.team_b_id || addingPlayerTeamId === match.team_b_id
+                }
+                className="rounded-xl bg-[#0B4D2B] px-4 py-2.5 text-sm font-black text-white transition hover:bg-[#166534] disabled:opacity-50"
+              >
+                {addingPlayerTeamId === match.team_b_id ? "ADDING..." : "+ ADD"}
+              </button>
+            </div>
           </div>
         </section>
       </div>

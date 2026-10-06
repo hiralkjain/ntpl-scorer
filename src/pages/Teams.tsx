@@ -3,7 +3,7 @@ import type { Team } from "../lib/types";
 export default function Teams({ teams }: { teams: Team[] }) {
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-black">Teams</h1>
+      <h1 className="text-3xl font-black text-slate-900">Teams</h1>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {teams.map((t) => (

@@ -187,6 +187,8 @@ export default function Scorer() {
   const [tieWinnerId, setTieWinnerId] = useState("");
 
   const [teamNames, setTeamNames] = useState<Record<string, string>>({});
+  const [showOtherRuns, setShowOtherRuns] = useState(false);
+  const [otherRuns, setOtherRuns] = useState("");
 
   /*
    * ---------------------------------------------------------
@@ -310,39 +312,60 @@ export default function Scorer() {
    * ---------------------------------------------------------
    */
 
-  useEffect(() => {
-    if (!innings) return;
+ useEffect(() => {
+   if (!innings) return;
 
-    const isCompleted = innings.innings_status === "completed";
-    const isLive = !isCompleted;
+   const isCompleted = innings.innings_status === "completed";
+   const isLive = !isCompleted;
 
-    const atOpeningBoundary =
-      innings.legal_balls >= FEMALE_PHASE_BALLS &&
-      innings.striker_id === null &&
-      innings.non_striker_id === null;
+   /*
+    * The opening phase ends at 12 legal balls.
+    *
+    * At exactly 12 legal balls, striker/non-striker are intentionally
+    * cleared so the scorer can select the male batters.
+    *
+    * However, wides/no-balls after 2 overs are NOT legal balls.
+    * Therefore legal_balls can remain 12 even after a ball has already
+    * been recorded in the normal phase.
+    *
+    * A ball with sequence > 12 proves that normal-phase scoring has
+    * already started.
+    */
+   const normalPhaseHasStarted = balls.some(
+     (ball) => ball.ball_sequence > FEMALE_PHASE_BALLS,
+   );
 
-    setShowMaleBatterSelection(isLive && atOpeningBoundary);
+   const atOpeningBoundary =
+     innings.legal_balls >= FEMALE_PHASE_BALLS &&
+     innings.striker_id === null &&
+     innings.non_striker_id === null &&
+     !normalPhaseHasStarted;
 
-    setShowBowlerChange(
-      isLive && innings.current_bowler_id === null && !atOpeningBoundary,
-    );
+   setShowMaleBatterSelection(isLive && atOpeningBoundary);
 
-    setShowSecondInningsSetup(innings.innings_number === 1 && isCompleted);
+   setShowBowlerChange(
+     isLive &&
+       innings.current_bowler_id === null &&
+       !atOpeningBoundary &&
+       !showMaleBatterSelection,
+   );
 
-    if (innings.innings_number !== 1 || !isCompleted) {
-      setSecondStrikerId("");
-      setSecondNonStrikerId("");
-      setSecondBowlerId("");
-    }
+   setShowSecondInningsSetup(innings.innings_number === 1 && isCompleted);
 
-    const tie =
-      innings.innings_number === 2 &&
-      isCompleted &&
-      innings.target_runs !== null &&
-      innings.total_runs === innings.target_runs - 1;
+   if (innings.innings_number !== 1 || !isCompleted) {
+     setSecondStrikerId("");
+     setSecondNonStrikerId("");
+     setSecondBowlerId("");
+   }
 
-    setShowTieWinner(tie);
-  }, [innings]);
+   const tie =
+     innings.innings_number === 2 &&
+     isCompleted &&
+     innings.target_runs !== null &&
+     innings.total_runs === innings.target_runs - 1;
+
+   setShowTieWinner(tie);
+ }, [innings, balls]);
 
   /*
    * ---------------------------------------------------------
@@ -1103,6 +1126,19 @@ export default function Scorer() {
       extrasRuns: 0,
       legalDelivery: true,
     });
+  }
+  async function addOtherRuns() {
+    const value = Number(otherRuns);
+
+    if (!Number.isInteger(value) || value < 0) {
+      notify("Enter a valid whole number of runs.");
+      return;
+    }
+
+    await addRuns(value);
+
+    setOtherRuns("");
+    setShowOtherRuns(false);
   }
 
   /*
@@ -2071,7 +2107,7 @@ export default function Scorer() {
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="mb-4 font-black text-slate-900">Score</div>
 
-        <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
+        <div className="grid grid-cols-3 gap-3 sm:grid-cols-7">
           {[0, 1, 2, 3, 4, 6].map((runs) => (
             <button
               key={runs}
@@ -2082,7 +2118,49 @@ export default function Scorer() {
               {runs}
             </button>
           ))}
+
+          <button
+            disabled={busy || showBowlerChange}
+            onClick={() => setShowOtherRuns(!showOtherRuns)}
+            className="rounded-2xl border-2 border-[#0B4D2B] bg-green-50 py-6 text-lg font-black text-[#0B4D2B] shadow-sm transition hover:bg-green-100 active:scale-95 disabled:opacity-40"
+          >
+            OTHER
+          </button>
         </div>
+
+        {showOtherRuns && (
+          <div className="mt-4 rounded-2xl border-2 border-green-200 bg-green-50 p-4">
+            <div className="text-sm font-black text-[#0B4D2B]">
+              Enter custom runs
+            </div>
+
+            <div className="mt-3 flex gap-3">
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={otherRuns}
+                onChange={(e) => setOtherRuns(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    void addOtherRuns();
+                  }
+                }}
+                placeholder="e.g. 7"
+                autoFocus
+                className="min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-4 py-3 text-lg font-bold text-slate-900 outline-none focus:border-[#0B4D2B] focus:ring-2 focus:ring-green-100"
+              />
+
+              <button
+                disabled={busy || showBowlerChange || otherRuns === ""}
+                onClick={() => void addOtherRuns()}
+                className="rounded-xl bg-[#0B4D2B] px-6 py-3 font-black text-white disabled:opacity-40"
+              >
+                SAVE
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
           <button
