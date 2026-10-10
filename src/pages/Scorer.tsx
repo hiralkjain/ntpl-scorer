@@ -190,6 +190,12 @@ export default function Scorer() {
   const [showOtherRuns, setShowOtherRuns] = useState(false);
   const [otherRuns, setOtherRuns] = useState("");
 
+  const [showBatterSubstitution, setShowBatterSubstitution] = useState(false);
+  const [substitutionRole, setSubstitutionRole] = useState<
+    "striker" | "non-striker"
+  >("striker");
+  const [substitutePlayerId, setSubstitutePlayerId] = useState("");
+
   /*
    * ---------------------------------------------------------
    * LOAD MATCH
@@ -312,60 +318,57 @@ export default function Scorer() {
    * ---------------------------------------------------------
    */
 
- useEffect(() => {
-   if (!innings) return;
+  useEffect(() => {
+    if (!innings) return;
 
-   const isCompleted = innings.innings_status === "completed";
-   const isLive = !isCompleted;
+    const isCompleted = innings.innings_status === "completed";
+    const isLive = !isCompleted;
 
-   /*
-    * The opening phase ends at 12 legal balls.
-    *
-    * At exactly 12 legal balls, striker/non-striker are intentionally
-    * cleared so the scorer can select the male batters.
-    *
-    * However, wides/no-balls after 2 overs are NOT legal balls.
-    * Therefore legal_balls can remain 12 even after a ball has already
-    * been recorded in the normal phase.
-    *
-    * A ball with sequence > 12 proves that normal-phase scoring has
-    * already started.
-    */
-   const normalPhaseHasStarted = balls.some(
-     (ball) => ball.ball_sequence > FEMALE_PHASE_BALLS,
-   );
+    /*
+     * The opening phase ends at 12 legal balls.
+     *
+     * At exactly 12 legal balls, striker/non-striker are intentionally
+     * cleared so the scorer can select the male batters.
+     *
+     * However, wides/no-balls after 2 overs are NOT legal balls.
+     * Therefore legal_balls can remain 12 even after a ball has already
+     * been recorded in the normal phase.
+     *
+     * A ball with sequence > 12 proves that normal-phase scoring has
+     * already started.
+     */
+    const normalPhaseHasStarted = balls.some(
+      (ball) => ball.ball_sequence > FEMALE_PHASE_BALLS,
+    );
 
-   const atOpeningBoundary =
-     innings.legal_balls >= FEMALE_PHASE_BALLS &&
-     innings.striker_id === null &&
-     innings.non_striker_id === null &&
-     !normalPhaseHasStarted;
+    const atOpeningBoundary =
+      innings.legal_balls >= FEMALE_PHASE_BALLS &&
+      innings.striker_id === null &&
+      innings.non_striker_id === null &&
+      !normalPhaseHasStarted;
 
-   setShowMaleBatterSelection(isLive && atOpeningBoundary);
+    setShowMaleBatterSelection(isLive && atOpeningBoundary);
 
-   setShowBowlerChange(
-     isLive &&
-       innings.current_bowler_id === null &&
-       !atOpeningBoundary &&
-       !showMaleBatterSelection,
-   );
+    setShowBowlerChange(
+      isLive && innings.current_bowler_id === null && !atOpeningBoundary,
+    );
 
-   setShowSecondInningsSetup(innings.innings_number === 1 && isCompleted);
+    setShowSecondInningsSetup(innings.innings_number === 1 && isCompleted);
 
-   if (innings.innings_number !== 1 || !isCompleted) {
-     setSecondStrikerId("");
-     setSecondNonStrikerId("");
-     setSecondBowlerId("");
-   }
+    if (innings.innings_number !== 1 || !isCompleted) {
+      setSecondStrikerId("");
+      setSecondNonStrikerId("");
+      setSecondBowlerId("");
+    }
 
-   const tie =
-     innings.innings_number === 2 &&
-     isCompleted &&
-     innings.target_runs !== null &&
-     innings.total_runs === innings.target_runs - 1;
+    const tie =
+      innings.innings_number === 2 &&
+      isCompleted &&
+      innings.target_runs !== null &&
+      innings.total_runs === innings.target_runs - 1;
 
-   setShowTieWinner(tie);
- }, [innings, balls]);
+    setShowTieWinner(tie);
+  }, [innings, balls]);
 
   /*
    * ---------------------------------------------------------
@@ -468,6 +471,16 @@ export default function Scorer() {
 
   const bowlingPlayers = players.filter(
     (p) => p.team_id === innings?.bowling_team_id,
+  );
+
+  // While innings 1 is displayed as complete, the upcoming innings 2
+  // batting/bowling teams are the reverse of innings 1.
+  const secondInningsBattingPlayers = players.filter(
+    (p) => p.team_id === innings?.bowling_team_id,
+  );
+
+  const secondInningsBowlingPlayers = players.filter(
+    (p) => p.team_id === innings?.batting_team_id,
   );
 
   const availableNewBatters = battingPlayers.filter(
@@ -763,6 +776,12 @@ export default function Scorer() {
     setSecondNonStrikerId("");
     setSecondBowlerId("");
     setShowSecondInningsSetup(false);
+    setShowBowlerChange(false);
+    setShowMaleBatterSelection(false);
+    setShowWicket(false);
+    setShowReturn(false);
+    setNextStrikerId("");
+    setNextNonStrikerId("");
 
     notify(`Second innings started. Target: ${targetRuns}`);
   }
@@ -1355,6 +1374,95 @@ export default function Scorer() {
 
   /*
    * ---------------------------------------------------------
+   * BATTER SUBSTITUTION (NO BALL IS RECORDED)
+   * ---------------------------------------------------------
+   */
+
+  async function substituteBatter() {
+    if (!innings) return;
+
+    if (innings.innings_status === "completed") {
+      notify("This innings is complete.");
+      return;
+    }
+
+    if (!substitutePlayerId) {
+      notify("Select a replacement batter.");
+      return;
+    }
+
+    const selected = playerMap.get(substitutePlayerId);
+    if (!selected || selected.team_id !== innings.batting_team_id) {
+      notify("Select a player from the batting team's playing squad.");
+      return;
+    }
+
+    if (
+      selected.id === innings.striker_id ||
+      selected.id === innings.non_striker_id
+    ) {
+      notify("That player is already batting.");
+      return;
+    }
+
+    if (femalePhase && !isFemale(selected)) {
+      notify("Only female batters can be selected during the opening 2 overs.");
+      return;
+    }
+
+    if (!femalePhase && isFemale(selected)) {
+      const eligible =
+        innings.female_return_eligible_ids?.includes(selected.id) &&
+        !innings.female_return_used_ids?.includes(selected.id);
+
+      if (!eligible) {
+        notify("This female player is not eligible to return.");
+        return;
+      }
+    }
+
+    const updatedUsedIds = [...(innings.female_return_used_ids ?? [])];
+    if (
+      isFemale(selected) &&
+      !femalePhase &&
+      !updatedUsedIds.includes(selected.id)
+    ) {
+      updatedUsedIds.push(selected.id);
+    }
+
+    const updateFields =
+      substitutionRole === "striker"
+        ? { striker_id: selected.id, female_return_used_ids: updatedUsedIds }
+        : {
+            non_striker_id: selected.id,
+            female_return_used_ids: updatedUsedIds,
+          };
+
+    setBusy(true);
+    const { data, error } = await supabase
+      .from("innings")
+      .update(updateFields)
+      .eq("id", innings.id)
+      .select()
+      .single();
+    setBusy(false);
+
+    if (error) {
+      console.error("Failed to substitute batter:", error);
+      notify(error.message || "Could not change batter.");
+      return;
+    }
+
+    setInnings(data as Innings);
+    setSubstitutePlayerId("");
+    setShowBatterSubstitution(false);
+    notify(
+      `${selected.name} is now the ${substitutionRole === "striker" ? "striker" : "non-striker"}. No ball was counted.`,
+    );
+  }
+
+  /*
+   * ---------------------------------------------------------
    * BOWLER CHANGE
    * ---------------------------------------------------------
    */
@@ -1366,11 +1474,6 @@ export default function Scorer() {
 
     if (femalePhase && !isFemale(selected)) {
       notify("Select a valid bowler for this phase.");
-      return;
-    }
-
-    if (innings.current_bowler_id === playerId) {
-      notify("Select a different bowler.");
       return;
     }
 
@@ -1799,7 +1902,7 @@ export default function Scorer() {
                   >
                     <option value="">Select female striker</option>
 
-                    {battingPlayers
+                    {secondInningsBattingPlayers
                       .filter((player) => isFemale(player))
                       .map((player) => (
                         <option
@@ -1827,7 +1930,7 @@ export default function Scorer() {
                   >
                     <option value="">Select female non-striker</option>
 
-                    {battingPlayers
+                    {secondInningsBattingPlayers
                       .filter((player) => isFemale(player))
                       .map((player) => (
                         <option
@@ -1855,7 +1958,7 @@ export default function Scorer() {
                   >
                     <option value="">Select female bowler</option>
 
-                    {bowlingPlayers
+                    {secondInningsBowlingPlayers
                       .filter((player) => isFemale(player))
                       .map((player) => (
                         <option key={player.id} value={player.id}>
@@ -2101,6 +2204,91 @@ export default function Scorer() {
           </button>
         </div>
       </div>
+
+      {/* BATTER SUBSTITUTION */}
+
+      {innings && innings.innings_status !== "completed" && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <button
+            type="button"
+            onClick={() => setShowBatterSubstitution((open) => !open)}
+            className="rounded-xl border border-[#0B4D2B] bg-green-50 px-4 py-3 font-black text-[#0B4D2B] transition hover:bg-green-100"
+          >
+            {showBatterSubstitution
+              ? "CANCEL BATTER CHANGE"
+              : "CHANGE BATTER (NO BALL)"}
+          </button>
+
+          {showBatterSubstitution && (
+            <div className="mt-4 grid gap-4 sm:grid-cols-3">
+              <label className="block">
+                <span className="text-sm font-bold text-slate-700">
+                  Batter position
+                </span>
+                <select
+                  value={substitutionRole}
+                  onChange={(e) => {
+                    setSubstitutionRole(
+                      e.target.value as "striker" | "non-striker",
+                    );
+                    setSubstitutePlayerId("");
+                  }}
+                  className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900"
+                >
+                  <option value="striker">Replace striker</option>
+                  <option value="non-striker">Replace non-striker</option>
+                </select>
+              </label>
+
+              <label className="block sm:col-span-2">
+                <span className="text-sm font-bold text-slate-700">
+                  Replacement from playing squad
+                </span>
+                <select
+                  value={substitutePlayerId}
+                  onChange={(e) => setSubstitutePlayerId(e.target.value)}
+                  className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900"
+                >
+                  <option value="">Select replacement batter</option>
+                  {battingPlayers
+                    .filter(
+                      (player) =>
+                        player.id !== innings.striker_id &&
+                        player.id !== innings.non_striker_id &&
+                        (femalePhase
+                          ? isFemale(player)
+                          : !isFemale(player) ||
+                            eligibleReturns.some(
+                              (eligible) => eligible.id === player.id,
+                            )),
+                    )
+                    .map((player) => (
+                      <option key={player.id} value={player.id}>
+                        {player.name}
+                        {isFemale(player) ? " (Female)" : ""}
+                      </option>
+                    ))}
+                </select>
+              </label>
+
+              <button
+                type="button"
+                disabled={!substitutePlayerId || busy}
+                onClick={() => void substituteBatter()}
+                className="rounded-xl bg-[#0B4D2B] px-5 py-3 font-black text-white disabled:cursor-not-allowed disabled:opacity-50 sm:col-span-3"
+              >
+                CONFIRM BATTER CHANGE
+              </button>
+              <p className="text-xs text-slate-500 sm:col-span-3">
+                This changes the selected batting position without inserting a
+                ball or changing the score. Opening-phase replacements must be
+                female; after the opening phase, female replacements must be
+                eligible to return.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* SCORING */}
 
